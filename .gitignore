@@ -1,0 +1,5 @@
+# Ignore Makefile
+Makefile
+
+# Ignore environment variables file
+.env
