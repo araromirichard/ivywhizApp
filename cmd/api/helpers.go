@@ -1,10 +1,12 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/araromirichard/internal/validator"
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Define a custom envelope type. This will be used to wrap the JSON response that
@@ -29,6 +32,16 @@ func (app *application) getRequestID(r *http.Request) (int64, error) {
 	}
 
 	return id, nil
+}
+
+// Get Request Params
+func (app *application) getRequestParams(r *http.Request) (string, error) {
+	params := httprouter.ParamsFromContext(r.Context())
+	paramsStr := params.ByName("id")
+	if paramsStr == "" {
+		return "", errors.New("this is an invalid id parameter")
+	}
+	return paramsStr, nil
 }
 
 // writeJson helper for sending response
@@ -157,6 +170,44 @@ func (app *application) readInt(qs url.Values, key string, defaultValue int, v *
 	}
 
 	return i
+}
+
+func (app *application) readBool(qs url.Values, key string, defaultValue bool) bool {
+	s := qs.Get(key)
+	if s == "" {
+		return defaultValue
+	}
+
+	b, err := strconv.ParseBool(s)
+	if err != nil {
+		return defaultValue
+	}
+	return b
+}
+
+// passwordMatches checks if the provided password matches the stored password hash
+func (app *application) passwordMatches(plainTextPassword, hashedPassword string) (bool, error) {
+	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(plainTextPassword))
+	if err != nil {
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func (app *application) createAppID(s string) string {
+	min := int64(100000000)
+	max := int64(999999999)
+	nBig, err := rand.Int(rand.Reader, big.NewInt(max-min+1))
+	if err != nil {
+		app.logger.PrintError(err, nil)
+		return err.Error()
+	}
+	randomNumber := nBig.Int64() + min
+	s = strings.ToLower(s)
+	return s + fmt.Sprintf("%d", randomNumber)
 }
 
 //background func

@@ -9,15 +9,25 @@ import (
 // and other errors can be added as needed
 var (
 	ErrRecordNotFound = errors.New("record not found")
-	//ErrEditConflict   = errors.New("edit conflict")
+	ErrEditConflict   = errors.New("edit conflict")
 )
 
 type Models struct {
-	Users UserModel
+	Users       UserModel
+	Tutors      TutorModel
+	Students    StudentModel
+	UserPhoto   UserPhotoModel
+	Tokens      TokenModel
+	Permissions PermissionModel
 }
 
 func NewModels(db *sql.DB) Models {
 	return Models{
-		Users: UserModel{DB: db},
+		Users:       UserModel{DB: db},
+		Tutors:      TutorModel{DB: db},
+		Students:    StudentModel{DB: db},
+		UserPhoto:   UserPhotoModel{DB: db},
+		Tokens:      TokenModel{DB: db},
+		Permissions: PermissionModel{DB: db},
 	}
 }
