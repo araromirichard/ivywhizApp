@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS students (
     id bigserial PRIMARY KEY,
-    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id BIGINT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     family_background TEXT,
     parent_first_name VARCHAR(50) NOT NULL,
     parent_last_name VARCHAR(50) NOT NULL,
