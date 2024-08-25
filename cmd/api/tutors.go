@@ -684,8 +684,7 @@ func (app *application) ListTutorSkillsHandler(w http.ResponseWriter, r *http.Re
 func (app *application) UpdateTutorVerificationHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse the request body
 	var input struct {
-		IvwID        string `json:"ivw_id"`
-		Verification bool   `json:"verification"`
+		IvwID string `json:"ivw_id"`
 	}
 
 	err := app.readJSON(w, r, &input)
@@ -711,31 +710,45 @@ func (app *application) UpdateTutorVerificationHandler(w http.ResponseWriter, r 
 		return
 	}
 
-	// Fetch the existing tutor record from the database
-	tutor, err := app.models.Tutors.GetByID(input.IvwID)
-	if err != nil {
-		switch {
-		case errors.Is(err, data.ErrRecordNotFound):
-			app.NotFoundResponse(w, r)
-		default:
-			app.serverErrorResponse(w, r, fmt.Errorf("error getting tutor: %w", err))
-		}
-		return
-	}
-
-	// Update the verification status
-	tutor.Verification = input.Verification
-
-	// Update the tutor data in the database
-	err = app.models.Tutors.UpdateTutor(tutor)
+	//Get user id
+	userID, err := app.models.Tutors.GetId(input.IvwID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
+	// fmt.Println(userID)
+
+	//get user details
+	tutor, err := app.models.Users.GetUser(userID)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	
+
+	// Update the tutor data in the database
+	err = app.models.Tutors.VerifyTutor(input.IvwID)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Send email asynchronously
+	app.background(func() {
+		data := map[string]interface{}{
+			"tutorName": tutor.FirstName + " " + tutor.LastName,
+			"logoURL":   "https://res.cloudinary.com/dbm6gjv59/image/upload/v1721847638/Group_1_i6y4u4.png",
+		}
+		err := app.mailer.Send(tutor.Email, "tutor_verified.tmpl", data)
+		if err != nil {
+			app.logger.PrintError(err, nil)
+		}
+	})
+
 	// Send a response
 	message := "Tutor verification status updated successfully."
-	err = app.writeJSON(w, http.StatusOK, envelope{"message": message, "tutor_id": tutor.IvwID}, nil)
+	err = app.writeJSON(w, http.StatusOK, envelope{"message": message}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}

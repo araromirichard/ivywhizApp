@@ -162,7 +162,7 @@ func (tm *TutorModel) GetByID(ivwID string) (*Tutor, error) {
 				)
 			) FILTER (WHERE tr.tutor_id IS NOT NULL), '[]'
 		) AS ratings,
-	tsk.skills
+	tsk.skill
 	FROM
 		tutors t
 	INNER JOIN
@@ -189,7 +189,7 @@ func (tm *TutorModel) GetByID(ivwID string) (*Tutor, error) {
 		u.id, u.email, u.first_name, u.last_name, u.username,
 		u.activated, u.created_at, u.updated_at, u.role, u.about_yourself,
 		u.date_of_birth, u.gender, u.street_address_1, u.street_address_2, u.city,
-		u.state, u.zipcode, u.country, u.version, up.photo_url, tl.languages, tsk.skills
+		u.state, u.zipcode, u.country, u.version, up.photo_url, tl.languages, tsk.skill
 	`
 
 	args := []interface{}{ivwID}
@@ -589,7 +589,7 @@ func (tm *TutorModel) GetTutorEmploymentHistory(tutorID string) ([]EmploymentHis
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 	query := `
-		SELECT company, position, start_date, end_date, created_at, updated_at FROM tutor_employment_history
+		SELECT company, position, start_date, end_date FROM tutor_employment_history
 		WHERE tutor_id = $1`
 	args := []interface{}{tutorID}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -614,28 +614,31 @@ func (tm *TutorModel) GetTutorEmploymentHistory(tutorID string) ([]EmploymentHis
 	return employmentHistoryList, nil
 }
 
-// create tutor skill
+// CreateTutorSkills inserts or updates tutor skills.
 func (tm *TutorModel) CreateTutorSkills(tutorID string, skills []string) (*[]string, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
+	// SQL query to insert or update tutor skills.
 	query := `
 		INSERT INTO tutor_skills (tutor_id, skills)
 		VALUES ($1, $2)
-		ON CONFLICT (tutor_id) DO UPDATE SET skills = existing.skills
+		ON CONFLICT (tutor_id) DO UPDATE
+		SET skills = EXCLUDED.skills
 		RETURNING skills`
 
 	var updatedSkills []string
 	args := []interface{}{tutorID, pq.StringArray(skills)}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
+
+	// Execute the query and scan the result into updatedSkills.
 	err := tm.DB.QueryRowContext(ctx, query, args...).Scan(pq.Array(&updatedSkills))
 	if err != nil {
 		return nil, fmt.Errorf("error inserting tutor skills: %w", err)
 	}
 
 	return &updatedSkills, nil
-
 }
 
 // get all skills for tutor
@@ -671,7 +674,6 @@ func ValidateTutor(v *validator.Validator, tutor *Tutor) {
 	ValidateTutorIvwID(v, tutor.IvwID)
 }
 
-
 // Seperate validation for IvwID so i can reuse it in other places
 func ValidateTutorIvwID(v *validator.Validator, tutorID string) {
 	v.Check(tutorID != "", "TutorID", "cannot be empty")
@@ -690,6 +692,54 @@ func ValidateTutorEmploymentHistory(v *validator.Validator, tutorEmploymentHisto
 	v.Check(!tutorEmploymentHistory.StartDate.IsZero(), "StartDate", "cannot be empty")
 	v.Check(!tutorEmploymentHistory.EndDate.IsZero(), "EndDate", "cannot be empty")
 	v.Check(tutorEmploymentHistory.StartDate.Before(tutorEmploymentHistory.EndDate), "EndDate", "must be after StartDate")
+}
+
+// verify tutor by admin
+func (tm *TutorModel) VerifyTutor(IvwID string) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	query := `
+		UPDATE tutors
+		SET verification = true
+		WHERE ivw_id = $1`
+	args := []interface{}{IvwID}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	result, err := tm.DB.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("error verifying tutor: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error verifying tutor: %w", err)
+	}
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
+	}
+	return nil
+}
+
+func (tm *TutorModel) GetId(IvwID string) (int64, error) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	query := `
+		SELECT user_id FROM tutors
+		WHERE ivw_id = $1`
+	args := []interface{}{IvwID}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	var userID int64
+	err := tm.DB.QueryRowContext(ctx, query, args...).Scan(&userID)
+
+	if err != nil {
+		switch {
+		case err == sql.ErrNoRows:
+			return 0, ErrRecordNotFound
+		default:
+			return 0, fmt.Errorf("error getting tutor id: %w", err)
+		}
+	}
+	return userID, nil
 }
 
 func ValidateTutorRating(v *validator.Validator, tutorRating *Rating) {

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-
 	"github.com/araromirichard/internal/validator"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -112,10 +111,9 @@ func (m UserModel) Insert(u *User) error {
 	return nil
 }
 
-// GetAll fetches users from the database filtered by various criteria.
 func (m UserModel) GetAll(searchTerm string, classPreferences []string, filters Filters, activated *bool) ([]*User, Metadata, error) {
 	query := fmt.Sprintf(`
-		SELECT count(*) OVER(), u.id, u.email, u.first_name, u.last_name, u.username, u.activated, u.role, u.country, u.state, u.city, u.created_at, u.updated_at, u.version,
+		SELECT count(*) OVER() AS total_count, u.id, u.email, u.first_name, u.last_name, u.username, u.activated, u.role, u.country, u.state, u.city, u.created_at, u.updated_at, u.version,
 		       up.photo_url AS photo_url, up.created_at AS photo_created_at, up.updated_at AS photo_updated_at
 		FROM users u
 		LEFT JOIN user_photos up ON u.id = up.user_id
@@ -134,10 +132,18 @@ func (m UserModel) GetAll(searchTerm string, classPreferences []string, filters 
 		LIMIT $3 OFFSET $4
 	`, filters.SortColumn(), filters.SortDirection())
 
+	// Dereference activated pointer if it is not nil
+	var activatedValue interface{}
+	if activated != nil {
+		activatedValue = *activated
+	} else {
+		activatedValue = nil
+	}
+
 	args := []interface{}{
 		searchTerm,
-		activated,
-		filters.limits(),
+		activatedValue,
+		filters.PageSize,
 		filters.offset(),
 	}
 
@@ -212,7 +218,7 @@ func (m UserModel) GetUser(id int64) (*User, error) {
 	query := `
 		SELECT u.id, u.email, u.first_name, u.last_name, u.username, u.activated, u.role, u.about_yourself, u.date_of_birth, u.gender,
 			   u.street_address_1, u.street_address_2, u.city, u.state, u.zipcode, u.country, u.created_at, u.updated_at, u.version,
-			   up.url AS photo_url, up.created_at AS photo_created_at, up.updated_at AS photo_updated_at
+			   up.photo_url AS photo_url, up.public_id, up.created_at AS photo_created_at, up.updated_at AS photo_updated_at
 		FROM users u
 		LEFT JOIN user_photos up ON u.id = up.user_id
 		WHERE u.id = $1
@@ -220,6 +226,9 @@ func (m UserModel) GetUser(id int64) (*User, error) {
 
 	// Declare a user struct to hold the returned value
 	var user User
+	var photoURL sql.NullString
+	var photoPublicID sql.NullString
+	var photoCreatedAt, photoUpdatedAt sql.NullTime
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -245,9 +254,10 @@ func (m UserModel) GetUser(id int64) (*User, error) {
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.Version,
-		&user.Photo.URL,
-		&user.Photo.CreatedAt,
-		&user.Photo.UpdatedAt,
+		&photoURL,
+		&photoPublicID,
+		&photoCreatedAt,
+		&photoUpdatedAt,
 	)
 
 	if err != nil {
@@ -257,6 +267,22 @@ func (m UserModel) GetUser(id int64) (*User, error) {
 		default:
 			return nil, err
 		}
+	}
+
+	user.Photo = &UserPhoto{}
+	// Assign the nullable values to the user struct
+	if photoURL.Valid {
+		user.Photo.URL = photoURL.String
+	}
+	if photoCreatedAt.Valid {
+		user.Photo.CreatedAt = photoCreatedAt.Time
+	}
+	if photoUpdatedAt.Valid {
+		user.Photo.UpdatedAt = photoUpdatedAt.Time
+	}
+	
+	if photoPublicID.Valid {
+		user.Photo.PublicID = photoPublicID.String
 	}
 
 	return &user, nil

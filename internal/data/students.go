@@ -76,19 +76,36 @@ func (m *StudentModel) GetByID(ivw_id string) (*Student, error) {
 
 	// Define the query to retrieve the student details
 	query := `
-		SELECT id, user_id, ivw_id, family_background, parent_first_name, parent_last_name, parent_relationship_to_child, parent_phone, parent_email, created_at, updated_at, version
-		FROM students
-		WHERE ivw_id = $1`
+		SELECT s.id, s.user_id, s.ivw_id, s.family_background, s.parent_first_name, s.parent_last_name, s.parent_relationship_to_child, s.parent_phone, s.parent_email, s.version,
+		u.id AS user_id, u.email, u.first_name, u.last_name, u.username,
+		u.activated, u.created_at, u.updated_at, u.role, u.about_yourself,
+		u.date_of_birth, u.gender, u.street_address_1, u.street_address_2, u.city,
+		u.state, u.zipcode, u.country, u.version, up.photo_url
+		FROM students s
+		INNER JOIN users u ON s.user_id = u.id
+		LEFT JOIN user_photos up ON u.id = up.user_id
+		WHERE s.ivw_id = $1
+		GROUP BY s.id, s.user_id, s.ivw_id, s.family_background, s.parent_first_name, s.parent_last_name, s.parent_relationship_to_child, s.parent_phone, s.parent_email, s.version,
+         u.id, u.email, u.first_name, u.last_name, u.username,
+         u.activated, u.created_at, u.updated_at, u.role, u.about_yourself,
+         u.date_of_birth, u.gender, u.street_address_1, u.street_address_2, u.city,
+         u.state, u.zipcode, u.country, u.version, up.photo_url;`
+
+	args := []interface{}{ivw_id}
 
 	// Create a context with a timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	// Create a Student instance to hold the results
-	student := &Student{}
+	var student Student
+	var user User
+	var photoURL sql.NullString
 
 	// Execute the query and scan the results into the student instance
-	err := m.DB.QueryRowContext(ctx, query, ivw_id).Scan(
+	row := m.DB.QueryRowContext(ctx, query, args...)
+
+	err := row.Scan(
 		&student.ID,
 		&student.UserID,
 		&student.IvwID,
@@ -98,9 +115,27 @@ func (m *StudentModel) GetByID(ivw_id string) (*Student, error) {
 		&student.ParentRelationshipToChild,
 		&student.ParentPhone,
 		&student.ParentEmail,
-		&student.CreatedAt,
-		&student.UpdatedAt,
 		&student.Version,
+		&user.ID,
+		&user.Email,
+		&user.FirstName,
+		&user.LastName,
+		&user.Username,
+		&user.Activated,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+		&user.Role,
+		&user.AboutYourself,
+		&user.DateOfBirth,
+		&user.Gender,
+		&user.StreetAddress1,
+		&user.StreetAddress2,
+		&user.City,
+		&user.State,
+		&user.Zipcode,
+		&user.Country,
+		&user.Version,
+		&photoURL,
 	)
 
 	// Check for errors
@@ -112,7 +147,21 @@ func (m *StudentModel) GetByID(ivw_id string) (*Student, error) {
 		return nil, fmt.Errorf("error scanning rows: %v", err)
 	}
 
-	return student, nil
+	// Handle the photo URL field
+	if user.Photo == nil {
+		user.Photo = &UserPhoto{}
+	}
+
+	if photoURL.Valid {
+		user.Photo.URL = photoURL.String
+	} else {
+		user.Photo.URL = ""
+	}
+
+	// Set the user field of the student instance
+	student.User = &user
+
+	return &student, nil
 }
 
 // updates the student details in the database

@@ -3,6 +3,7 @@ package mailer
 import (
 	"bytes"
 	"embed"
+	"fmt"
 	"html/template"
 	"time"
 
@@ -49,7 +50,7 @@ func (m Mailer) Send(recipient, templateFile string, data interface{}) error {
 
 	tmpl, err := template.New("email").ParseFS(templateFS, "templates/"+templateFile)
 	if err != nil {
-		return err
+		return fmt.Errorf("error parsing template: %v", err)
 	}
 
 	// Execute the named template "subject", passing in the dynamic data and storing the
@@ -57,7 +58,7 @@ func (m Mailer) Send(recipient, templateFile string, data interface{}) error {
 	subject := new(bytes.Buffer)
 	err = tmpl.ExecuteTemplate(subject, "subject", data)
 	if err != nil {
-		return err
+		return fmt.Errorf("error executing subject template: %v", err)
 	}
 
 	// Follow the same pattern to execute the "plainBody" template and store the result
@@ -65,14 +66,14 @@ func (m Mailer) Send(recipient, templateFile string, data interface{}) error {
 	plainBody := new(bytes.Buffer)
 	err = tmpl.ExecuteTemplate(plainBody, "plainBody", data)
 	if err != nil {
-		return err
+		return fmt.Errorf("error executing plainBody template: %v", err)
 	}
 
 	// And likewise with the "htmlBody" template.
 	htmlBody := new(bytes.Buffer)
 	err = tmpl.ExecuteTemplate(htmlBody, "htmlBody", data)
 	if err != nil {
-		return err
+		return fmt.Errorf("error executing htmlBody template: %v", err)
 	}
 
 	// Use the mail.NewMessage() function to initialize a new mail.Message instance.
@@ -103,6 +104,6 @@ func (m Mailer) Send(recipient, templateFile string, data interface{}) error {
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	return err
+	return fmt.Errorf("failed to send email after 3 attempts to %s: %s", recipient, err)
 
 }

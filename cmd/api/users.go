@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -91,8 +92,28 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 		}
 		return
 	}
-	
-	// insert details to user_photos table 
+
+	//grant permissions based on role
+	switch user.Role {
+	case "admin":
+		err = app.models.Permissions.AddForUser(user.ID, "admin:access")
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+	case "tutor":
+		err = app.models.Permissions.AddForUser(user.ID, "tutor:access")
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+	case "student":
+		err = app.models.Permissions.AddForUser(user.ID, "student:access")
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+	}
 
 	// Generate an activation token for this user
 	token, err := app.models.Tokens.New(user.ID, 3*24*time.Hour, data.ScopeActivation)
@@ -106,6 +127,7 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 		data := map[string]interface{}{
 			"activationToken": token.Plaintext,
 			"userID":          user.ID,
+			"logoURL":         "https://res.cloudinary.com/dbm6gjv59/image/upload/v1721847638/Group_1_i6y4u4.png",
 		}
 		err := app.mailer.Send(user.Email, "user_welcome.tmpl", data)
 		if err != nil {
@@ -118,6 +140,53 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}
+}
+
+func (app *application) initAdminUser(firstName, lastName, email, password string) error {
+	// Check if admin user already exists
+	user, err := app.models.Users.GetUserByEmail(email)
+	if err != nil && !errors.Is(err, data.ErrRecordNotFound) {
+		return err
+	}
+
+	if user != nil {
+		// Admin user already exists
+		app.logger.PrintInfo("Admin user already exists.", nil)
+		return nil
+	}
+
+	// Create a new admin user
+	user = &data.User{
+		FirstName: firstName,
+		LastName:  lastName,
+		Email:     email,
+		Role:      "admin",
+		Activated: true,
+	}
+
+	// Set the password for the admin user
+	err = user.Password.Set(password)
+	if err != nil {
+		app.logger.PrintError(err, nil)
+		return fmt.Errorf("failed to set password for admin user: %w", err)
+	}
+
+	// Insert the admin user into the database
+	err = app.models.Users.Insert(user)
+	if err != nil {
+		app.logger.PrintError(err, nil)
+		return fmt.Errorf("failed to insert admin user: %w", err)
+	}
+
+	// Grant admin permissions
+	err = app.models.Permissions.AddForUser(user.ID, "admin:access")
+	if err != nil {
+		app.logger.PrintError(err, nil)
+		return fmt.Errorf("failed to grant admin permissions: %w", err)
+	}
+
+	app.logger.PrintInfo("Admin user created successfully.", nil)
+	return nil
 }
 
 // loginUserHandler authenticates a user using their email and password
@@ -196,12 +265,11 @@ func (app *application) loginUserHandler(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// get all users
 func (app *application) ListUsersHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		SearchTerm       string   // For searching by email, first name, last name, etc.
 		ClassPreferences []string // Array of class preferences to filter users by
-		Activated        bool     // To filter users by their activation status
+		Activated        *bool    // To filter users by their activation status
 		data.Filters              // Pagination and sorting filters
 	}
 
@@ -222,8 +290,13 @@ func (app *application) ListUsersHandler(w http.ResponseWriter, r *http.Request)
 		"-id", "-first_name", "-last_name", "-email", "-role", "-city", "-state", "-country", "-activated",
 	}
 
-	// Read the activated parameter using app.readBool
-	input.Activated = app.readBool(qs, "activated", false)
+	// Read the activated parameter using app.readBool, if not provided set to nil
+	activated := app.readBool(qs, "activated", false)
+	if _, exists := qs["activated"]; exists {
+		input.Activated = &activated
+	} else {
+		input.Activated = nil
+	}
 
 	// Validate the filters
 	if data.ValidateFilters(v, input.Filters); !v.Valid() {
@@ -232,7 +305,7 @@ func (app *application) ListUsersHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get the users from the database
-	users, metadata, err := app.models.Users.GetAll(input.SearchTerm, input.ClassPreferences, input.Filters, &input.Activated)
+	users, metadata, err := app.models.Users.GetAll(input.SearchTerm, input.ClassPreferences, input.Filters, input.Activated)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -337,6 +410,3 @@ func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 }
-
-
-

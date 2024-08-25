@@ -31,8 +31,8 @@ type UserPhotoModel struct {
 // Insert a photo record on the database
 func (m UserPhotoModel) Insert(photo *UserPhoto) error {
 	query := `
-		INSERT INTO user_photos (user_id, url, public_id, created_at, version)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO user_photos (user_id, photo_url, public_id, created_at)
+		VALUES ($1, $2, $3, $4)
 		RETURNING id, created_at, version`
 
 	args := []interface{}{
@@ -40,6 +40,7 @@ func (m UserPhotoModel) Insert(photo *UserPhoto) error {
 		photo.URL,
 		photo.PublicID,
 		time.Now(),
+		
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -57,15 +58,15 @@ func (m UserPhotoModel) Insert(photo *UserPhoto) error {
 func (m UserPhotoModel) Update(photo *UserPhoto) error {
 	query := `
 		UPDATE user_photos
-		SET url = $1, public_id = $2, updated_at = $3, version = version + 1
-		WHERE id = $4
+		SET photo_url = $1, public_id = $2, updated_at = $3, version = version + 1
+		WHERE user_id = $4
 		RETURNING version`
 
 	args := []interface{}{
 		photo.URL,
 		photo.PublicID,
 		time.Now(),
-		photo.ID,
+		photo.UserID,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -111,6 +112,6 @@ func (m UserPhotoModel) Delete(id int64) error {
 
 // ValidateUserPhoto validates the photo URL
 func ValidateUserPhoto(v *validator.Validator, photo *UserPhoto) {
-	v.Check(photo.URL != "", "url", "must be provided")
-	v.Check(len(photo.URL) <= 500, "url", "must not be more than 500 bytes long")
+	v.Check(photo.URL != "", "photo_url", "must be provided")
+	v.Check(len(photo.URL) <= 500, "photo_url", "must not be more than 500 bytes long")
 }

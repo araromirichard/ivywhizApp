@@ -152,6 +152,7 @@ func (app *application) updateUserPhotoHandler(w http.ResponseWriter, r *http.Re
 
 	//create a new user photo record
 	user.Photo = &data.UserPhoto{
+		UserID:    user.ID,
 		URL:       uploadURL,
 		PublicID:  publicID,
 		CreatedAt: time.Now(),

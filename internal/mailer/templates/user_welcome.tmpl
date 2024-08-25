@@ -1,10 +1,10 @@
-{{define "subject"}}Welcome to Ivywhiz!{{end}}
+{{define "subject"}}Welcome!{{end}}
 {{define "plainBody"}}
 Hi,
 Thanks for signing up for an Ivywhiz account. We're excited to have you on board!
 For future reference, your user ID number is {{.userID}}.
 
-Please visit the following link to activate your account:
+Please click the link below to activate your account:
 http://localhost:4000/v1/activate?token={{.activationToken}}
 
 Please note that this is a one-time use token and it will expire in 3 days.
@@ -12,6 +12,7 @@ Please note that this is a one-time use token and it will expire in 3 days.
 Thanks,
 The Ivywhiz Team
 {{end}}
+
 {{define "htmlBody"}}
 <!doctype html>
 <html>
@@ -31,8 +32,8 @@ The Ivywhiz Team
         }
 
         .link {
-            background-color: #651414;
-            color: white;
+            background-color: #eeeeee;
+            color: #19283d;
             padding: 15px 32px;
             text-align: center;
             text-decoration: none;
@@ -41,10 +42,18 @@ The Ivywhiz Team
             margin: 4px 2px;
             cursor: pointer;
             border-radius: 4px;
+            transition: all 0.3s ease-in-out;
         }
 
         .link:hover {
             background-color: #850f0f;
+            color: white;
+        }
+
+        .logo {
+            display: block;
+            margin: 0 auto;
+            max-width: 200px;
         }
     </style>
     <!-- Include Toastr CSS -->
@@ -53,6 +62,8 @@ The Ivywhiz Team
 
 <body>
     <div class="container">
+        <img src="{{.logoURL}}" alt="Logo" class="logo"
+            onerror="this.onerror=null; this.src='https://logoipsum.com/logo/logo-7.svg'">
         <p>Hi,</p>
         <p>Thanks for signing up for an Ivywhiz account. We're excited to have you on board!</p>
         <p>For future reference, your user ID number is {{.userID}}.</p>

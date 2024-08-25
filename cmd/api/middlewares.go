@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/araromirichard/internal/data"
 	"github.com/araromirichard/internal/validator"
+	"github.com/tomasen/realip"
 	"golang.org/x/time/rate"
 )
 
@@ -65,40 +65,23 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
 	}()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract the Ip address from the request
-		ip, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			app.serverErrorResponse(w, r, err)
-			return
-		}
-		//lock the mutex to prevent the cod efrom being executed concurrently
-		mu.Lock()
-
-		//check if the ip address already exists in the map, if not found
-		// append it to the map
-		if _, found := clients[ip]; !found {
-			clients[ip] = &client{limiter: rate.NewLimiter(rate.Limit(app.config.limiter.rps), app.config.limiter.burst)}
-		}
-
-		//update the last seen time of the client
-		clients[ip].lastSeen = time.Now()
-
-		// Call the limiter.Allow() method to check if the client with current
-		// IP is allowed to make that request. if the request is not allowed, unlock the mutex
-		// and send a 429 Too Many Requests response to the client
-
-		if !clients[ip].limiter.Allow() {
-
+		if app.config.limiter.enabled {
+			// Use the realip.FromRequest() function to get the client's real IP address.
+			ip := realip.FromRequest(r)
+			mu.Lock()
+			if _, found := clients[ip]; !found {
+				clients[ip] = &client{
+					limiter: rate.NewLimiter(rate.Limit(app.config.limiter.rps), app.config.limiter.burst),
+				}
+			}
+			clients[ip].lastSeen = time.Now()
+			if !clients[ip].limiter.Allow() {
+				mu.Unlock()
+				app.rateLimitExceededResponse(w, r)
+				return
+			}
 			mu.Unlock()
-			app.rateLimitExceededResponse(w, r)
-
-			return
 		}
-		// Very importantly, unlock the mutex before calling the next handler in the
-		// chain. DON'T use defer to unlock the mutex, as that would mean
-		// that the mutex isn't unlocked until all the handlers downstream of this
-		// middleware have also returned.
-		mu.Unlock()
 		next.ServeHTTP(w, r)
 	})
 }
