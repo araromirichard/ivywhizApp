@@ -1,0 +1,41 @@
+# flyctl launch added from .gitignore
+# Ignore Makefile
+**\Makefile
+
+# Ignore environment variables file
+**\.envbin
+**\bin
+
+# flyctl launch added from vendor\github.com\creasty\defaults\.gitignore
+vendor\github.com\creasty\defaults\**\.DS_Store
+
+# flyctl launch added from vendor\github.com\go-mail\mail\v2\.gitignore
+
+
+# Binaries for programs and plugins
+vendor\github.com\go-mail\mail\v2\**\*.exe
+vendor\github.com\go-mail\mail\v2\**\*.dll
+vendor\github.com\go-mail\mail\v2\**\*.so
+vendor\github.com\go-mail\mail\v2\**\*.dylib
+
+# Test binary, build with `go test -c`
+vendor\github.com\go-mail\mail\v2\**\*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+vendor\github.com\go-mail\mail\v2\**\*.out
+
+
+# IDE's
+vendor\github.com\go-mail\mail\v2\**\.idea
+
+# flyctl launch added from vendor\github.com\joho\godotenv\.gitignore
+vendor\github.com\joho\godotenv\**\.DS_Store
+
+# flyctl launch added from vendor\github.com\lib\pq\.gitignore
+vendor\github.com\lib\pq\**\.db
+vendor\github.com\lib\pq\**\*.test
+vendor\github.com\lib\pq\**\*~
+vendor\github.com\lib\pq\**\*.swp
+vendor\github.com\lib\pq\**\.idea
+vendor\github.com\lib\pq\**\.vscode
+fly.toml

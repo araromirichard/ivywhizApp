@@ -1,20 +1,20 @@
 package main
 
 import (
-    "context"
-    "database/sql"
-    "flag"
-    "os"
-    "strings"
-    "sync"
-    "time"
+	"context"
+	"database/sql"
+	"flag"
+	"os"
+	"strings"
+	"sync"
+	"time"
 
-    "github.com/araromirichard/internal/data"
-    "github.com/araromirichard/internal/jsonlog"
-    "github.com/araromirichard/internal/mailer"
-    "github.com/araromirichard/internal/uploader"
-    "github.com/joho/godotenv"
-    _ "github.com/lib/pq" // Import the PostgreSQL driver
+	"github.com/araromirichard/internal/data"
+	"github.com/araromirichard/internal/jsonlog"
+	"github.com/araromirichard/internal/mailer"
+	"github.com/araromirichard/internal/uploader"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq" // Import the PostgreSQL driver
 )
 
 // version declares a constant holding the application version number
@@ -66,10 +66,13 @@ type application struct {
 
 func main() {
     var cfg config // cfg will hold the configuration
-    // Load variables from .env file
-    err := godotenv.Load()
-    if err != nil {
-        panic("Error loading .env file")
+
+    // Check if we are running in production (Fly.io) and skip loading .env file
+    if os.Getenv("FLY_APP_NAME") == "" {
+        err := godotenv.Load()
+        if err != nil {
+            panic("Error loading .env file")
+        }
     }
 
     // Parse command line flags into the cfg config struct
@@ -103,7 +106,7 @@ func main() {
     flag.StringVar(&cfg.cloudinary.apiKey, "cloudinary-api-key", os.Getenv("CLOUDINARY_API_KEY"), "Cloudinary API key")
     flag.StringVar(&cfg.cloudinary.apiSecret, "cloudinary-api-secret", os.Getenv("CLOUDINARY_API_SECRET"), "Cloudinary API secret")
 
-    //set smtp configuration fields
+    // Set smtp configuration fields
     flag.StringVar(&cfg.smtp.host, "smtp-host", os.Getenv("SMTP_HOST"), "SMTP host")
     flag.IntVar(&cfg.smtp.port, "smtp-port", 587, "SMTP port")
     flag.StringVar(&cfg.smtp.username, "smtp-username", os.Getenv("SMTP_USER"), "SMTP username")
@@ -125,9 +128,6 @@ func main() {
     // Call the open db function
     db, err := openDB(cfg)
     if err != nil {
-        // Use the PrintFatal() method to write a log entry containing the error at the
-        // FATAL level and exit. We have no additional properties to include in the log
-        // entry, so we pass nil as the second parameter.
         logger.PrintFatal(err, nil)
     }
     defer db.Close()
@@ -168,10 +168,10 @@ func openDB(cfg config) (*sql.DB, error) {
     db.SetConnMaxIdleTime(duration)
 
     // Try pinging the database to ensure a connection was established
-    context, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
 
-    err = db.PingContext(context)
+    err = db.PingContext(ctx)
     if err != nil {
         return nil, err
     }
