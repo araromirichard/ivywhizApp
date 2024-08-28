@@ -1,47 +1,30 @@
-# Stage 1: Build the Go application
-ARG GO_VERSION=1
-FROM golang:${GO_VERSION}-bookworm AS builder
+# Define the Go version to use
+ARG GO_VERSION=1.20
 
-# Set the working directory
+# Stage 1: Build the Go application
+FROM golang:${GO_VERSION}-bookworm as builder
+
+# Set the working directory inside the container
 WORKDIR /usr/src/app
 
-# Copy go.mod and go.sum and download dependencies
+# Copy go.mod and go.sum, then download dependencies
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
 
-# Copy the application source code into the container
+# Copy the rest of the application code
 COPY . .
 
-# Build the Go application
-WORKDIR /usr/src/app/cmd/api
-RUN go build -v -o /run-app .
+# Build the Go application, outputting to bin/linux_amd64/api
+RUN GOOS=linux GOARCH=amd64 go build -v -o ./bin/linux_amd64/api ./cmd/api
 
-# Stage 2: Run the migrations (optional)
-FROM golang:${GO_VERSION}-bookworm AS migrator
+# Stage 2: Create a smaller runtime image
+FROM debian:bookworm
 
-WORKDIR /usr/src/app
+# Set the working directory inside the container
+WORKDIR /root/
 
-# Copy the built application and source code from the builder stage
-COPY --from=builder /usr/src/app .
+# Copy the pre-built binary from the builder stage to the runtime image
+COPY --from=builder /usr/src/app/bin/linux_amd64/api /usr/local/bin/
 
-# Install the migration tool if needed
-# RUN go install -tags 'migrate' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
-
-# Run the migrations
-WORKDIR /usr/src/app/cmd/api
-RUN migrate -path /usr/src/app/migrations -database "${IVYWHIZ_DB_DSN}" up
-
-# Stage 3: Create the final runtime image
-FROM alpine:latest
-
-# Install any required packages (e.g., SSL certificates)
-RUN apk add --no-cache ca-certificates
-
-# Copy the compiled application from the builder stage
-# COPY --from=builder /run-app /usr/local/bin/
-
-# Expose the application's port (if needed)
-EXPOSE 8080
-
-# Run the application
-CMD ["run-app"]
+# Set the command to run the binary
+CMD ["api"]

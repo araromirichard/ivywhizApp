@@ -1,12 +1,14 @@
-# fly.toml app configuration file generated for ivywhizapp on 2024-08-27T16:57:23+01:00
+# fly.toml app configuration file generated for ivywhizapp on 2024-08-27T23:53:36+01:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
 app = 'ivywhizapp'
-primary_region = 'ams'
+primary_region = 'cdg'
 
 [build]
+  [build.args]
+    GO_VERSION = '1.21.6'
 
 [env]
   PORT = '8080'
