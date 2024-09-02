@@ -12,8 +12,10 @@ import (
 	"github.com/araromirichard/internal/data"
 	"github.com/araromirichard/internal/jsonlog"
 	"github.com/araromirichard/internal/mailer"
+	"github.com/araromirichard/internal/notification"
 	"github.com/araromirichard/internal/uploader"
 	"github.com/joho/godotenv"
+	"github.com/pusher/pusher-http-go/v5"
 	_ "github.com/lib/pq" // Import the PostgreSQL driver
 )
 
@@ -61,6 +63,7 @@ type application struct {
 	models   data.Models
 	uploader *uploader.ImageUploaderService
 	mailer   mailer.Mailer
+	notify   *notification.NotificationService
 	wg       sync.WaitGroup
 }
 
@@ -128,6 +131,15 @@ func main() {
 	defer db.Close()
 	logger.PrintInfo("DB connection established", nil)
 
+	// Initialize Pusher client
+	pusherClient := &pusher.Client{
+		AppID:   os.Getenv("PUSHER_APP_ID"),
+		Key:     os.Getenv("PUSHER_APP_KEY"),
+		Secret:  os.Getenv("PUSHER_APP_SECRET"),
+		Cluster: os.Getenv("PUSHER_APP_CLUSTER"),
+		Secure:  true,
+	}
+
 	// Initialize application
 	app := &application{
 		config:   cfg,
@@ -135,6 +147,7 @@ func main() {
 		models:   data.NewModels(db),
 		uploader: uploader.New(cfg.cloudinary.cloudName, cfg.cloudinary.apiKey, cfg.cloudinary.apiSecret),
 		mailer:   mailer.New(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
+		notify:   notification.New(pusherClient),
 	}
 
 	// Initialize the admin user
@@ -146,7 +159,7 @@ func main() {
 	logger.PrintFatal(app.serve(), nil)
 }
 
-// db connection
+// openDB establishes a connection to the database.
 func openDB(cfg config) (*sql.DB, error) {
 	db, err := sql.Open("postgres", cfg.db.dsn)
 	if err != nil {

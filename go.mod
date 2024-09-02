@@ -17,6 +17,8 @@ require (
 	github.com/creasty/defaults v1.5.1 // indirect
 	github.com/google/uuid v1.2.0 // indirect
 	github.com/gorilla/schema v1.2.0 // indirect
+	github.com/pusher/pusher-http-go/v5 v5.1.1 // indirect
+	golang.org/x/sys v0.21.0 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/mail.v2 v2.3.1 // indirect
 )

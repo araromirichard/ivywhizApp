@@ -59,12 +59,23 @@ func (app *application) CreateTutorHandler(w http.ResponseWriter, r *http.Reques
 	//Insert the tutor data into the database
 	err = app.models.Tutors.Insert(tutor)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		app.serverErrorResponse(w, r, fmt.Errorf("error creating tutor: %w", err))
 		return
 	}
 
-	//send a notification to the user and admin channels
-	//TODO: send a notification to the user and admin channels
+	
+	// Create the notification payload
+	notificationPayload := map[string]interface{}{
+		"tutor_id": tutor.IvwID,
+		"user_id":  user.ID,
+		"message":  "A new tutor profile has been created.",
+	}
+
+	// Send notification to the admin channel
+	if err := app.notify.SendNotification("adminChannel", "NewTuutor", notificationPayload); err != nil {
+		app.serverErrorResponse(w, r, fmt.Errorf("error sending notification: %w", err))
+		return
+	}
 
 	//send a response
 	message := "Tutor profile created successfully, please wait for verification."
@@ -725,7 +736,6 @@ func (app *application) UpdateTutorVerificationHandler(w http.ResponseWriter, r 
 		app.serverErrorResponse(w, r, err)
 		return
 	}
-	
 
 	// Update the tutor data in the database
 	err = app.models.Tutors.VerifyTutor(input.IvwID)
@@ -733,6 +743,22 @@ func (app *application) UpdateTutorVerificationHandler(w http.ResponseWriter, r 
 		app.serverErrorResponse(w, r, err)
 		return
 	}
+	
+	
+		
+	// Create the notification payload
+	notificationPayload := map[string]interface{}{
+		"title":    "Congratulations!",
+		"name":     tutor.FirstName + " " + tutor.LastName,
+		"message":  "You have been verified as a tutor.",
+	}
+
+	// Send notification to the admin channel
+	if err := app.notify.SendNotification("tutorChannel", "Verification", notificationPayload); err != nil {
+		app.serverErrorResponse(w, r, fmt.Errorf("error sending notification: %w", err))
+		return
+	}
+	
 
 	// Send email asynchronously
 	app.background(func() {
@@ -753,5 +779,5 @@ func (app *application) UpdateTutorVerificationHandler(w http.ResponseWriter, r 
 		app.serverErrorResponse(w, r, err)
 	}
 
-	// TODO: Send a notification to the user and admin channels
+
 }

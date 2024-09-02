@@ -21,9 +21,9 @@ func (app *application) routes() http.Handler {
 	// Authentications/ users
 	r.HandlerFunc(http.MethodPost, "/v1/auth/register", app.createUserHandler)
 	r.HandlerFunc(http.MethodPost, "/v1/auth/login", app.loginUserHandler)
-	
-	//get current logged in user 
-	r.HandlerFunc(http.MethodGet, "/v1/users/whoami", app.requireActivatedUser(app.WhoAmIHandler))
+
+	//get current logged in user
+	r.HandlerFunc(http.MethodGet, "/v1/auth/whoami", app.requireActivatedUser(app.WhoAmIHandler))
 
 	r.HandlerFunc(http.MethodGet, "/v1/users", app.requirePermission("admin:access", app.ListUsersHandler))
 

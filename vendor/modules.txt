@@ -34,6 +34,9 @@ github.com/julienschmidt/httprouter
 github.com/lib/pq
 github.com/lib/pq/oid
 github.com/lib/pq/scram
+# github.com/pusher/pusher-http-go/v5 v5.1.1
+## explicit; go 1.14
+github.com/pusher/pusher-http-go/v5
 # github.com/tomasen/realip v0.0.0-20180522021738-f0c99a92ddce
 ## explicit
 github.com/tomasen/realip
@@ -41,6 +44,13 @@ github.com/tomasen/realip
 ## explicit; go 1.18
 golang.org/x/crypto/bcrypt
 golang.org/x/crypto/blowfish
+golang.org/x/crypto/internal/alias
+golang.org/x/crypto/internal/poly1305
+golang.org/x/crypto/nacl/secretbox
+golang.org/x/crypto/salsa20/salsa
+# golang.org/x/sys v0.21.0
+## explicit; go 1.18
+golang.org/x/sys/cpu
 # golang.org/x/time v0.5.0
 ## explicit; go 1.18
 golang.org/x/time/rate
