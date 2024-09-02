@@ -19,7 +19,6 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 		Email          string  `json:"email"`
 		Password       string  `json:"password"`
 		Role           string  `json:"role"`
-		Address        *string `json:"address,omitempty"`
 		DateOfBirth    *string `json:"date_of_birth,omitempty"`
 		Gender         *string `json:"gender,omitempty"`
 		StreetAddress1 *string `json:"street_address_1,omitempty"`
@@ -38,14 +37,9 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	// Parse the DateOfBirth string into a time.Time pointer if it's not nil
-	var dateOfBirth *time.Time
-	if input.DateOfBirth != nil {
-		dob, err := time.Parse("2006-01-02", *input.DateOfBirth)
-		if err != nil {
-			app.badRequestResponse(w, r, err)
-			return
-		}
-		dateOfBirth = &dob
+	dateOfBirth, err := app.parseDateOfBirth(input.DateOfBirth)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
 	}
 
 	// Initialize a new User struct with the provided data
@@ -118,7 +112,8 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 	// Generate an activation token for this user
 	token, err := app.models.Tokens.New(user.ID, 3*24*time.Hour, data.ScopeActivation)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+
+		app.serverErrorResponse(w, r, fmt.Errorf("error generating token: %w", err))
 		return
 	}
 
@@ -323,16 +318,152 @@ func (app *application) ListUsersHandler(w http.ResponseWriter, r *http.Request)
 
 // get user by id
 func (app *application) GetUserByIdHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := app.getRequestID(r)
+	if err != nil {
+		app.NotFoundResponse(w, r)
+		return
+	}
 
+	user, err := app.models.Users.GetUser(id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.NotFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	message := "User retrieved successfully"
+	err = app.writeJSON(w, http.StatusOK, envelope{"message": message, "user": user}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 // update user by id
 func (app *application) UpdateUserByIdHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := app.getRequestID(r)
+	if err != nil {
+		app.NotFoundResponse(w, r)
+		return
+	}
+	user, err := app.models.Users.GetUser(id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.NotFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+	var input struct {
+		FirstName      string  `json:"first_name"`
+		LastName       string  `json:"last_name"`
+		Username       string  `json:"username"`
+		Email          string  `json:"email"`
+		Role           string  `json:"role"`
+		DateOfBirth    *string `json:"date_of_birth,omitempty"`
+		Gender         *string `json:"gender,omitempty"`
+		StreetAddress1 *string `json:"street_address_1,omitempty"`
+		StreetAddress2 *string `json:"street_address_2,omitempty"`
+		City           *string `json:"city,omitempty"`
+		State          *string `json:"state,omitempty"`
+		Country        *string `json:"country,omitempty"`
+		Zipcode        *string `json:"zipcode,omitempty"`
+	}
+	err = app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	if input.FirstName != "" {
+		user.FirstName = input.FirstName
+	}
+	if input.LastName != "" {
+		user.LastName = input.LastName
+	}
+	if input.Username != "" {
+		user.Username = input.Username
+	}
+	if input.Email != "" {
+		user.Email = input.Email
+	}
+	if input.Role != "" {
+		user.Role = input.Role
+	}
+	if input.StreetAddress1 != nil {
+		user.StreetAddress1 = input.StreetAddress1
+	}
+	if input.StreetAddress2 != nil {
+		user.StreetAddress2 = input.StreetAddress2
+	}
+	if input.City != nil {
+		user.City = input.City
+	}
+	if input.State != nil {
+		user.State = input.State
+	}
+	if input.Country != nil {
+		user.Country = input.Country
+	}
+	if input.Zipcode != nil {
+		user.Zipcode = input.Zipcode
+	}
 
+	if input.DateOfBirth != nil {
+		dateOfBirth, err := app.parseDateOfBirth(input.DateOfBirth)
+		if err != nil {
+			app.badRequestResponse(w, r, fmt.Errorf("invalid date of birth format: %v", err))
+			return
+		}
+
+		user.DateOfBirth = dateOfBirth
+	}
+	if input.Gender != nil {
+		user.Gender = input.Gender
+	}
+	err = app.models.Users.UpdateUser(user)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrEditConflict):
+			app.editConflictResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	message := "User updated successfully"
+	err = app.writeJSON(w, http.StatusOK, envelope{"message": message, "user": user}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 // delete user by id
-func (app *application) DeleteUserByIdHandler(w http.ResponseWriter, r *http.Request) {}
+func (app *application) DeleteUserByIdHandler(w http.ResponseWriter, r *http.Request) {
+
+	id, err := app.getRequestID(r)
+	if err != nil {
+		app.NotFoundResponse(w, r)
+		return
+	}
+
+	err = app.models.Users.Delete(id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.NotFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, fmt.Errorf("failed to delete user: %v", err))
+		}
+		return
+	}
+
+}
 
 // // get user by role
 // func (app *application) GetUserByRoleHandler(w http.ResponseWriter, r *http.Request) {}
@@ -408,5 +539,34 @@ func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
+	}
+}
+
+// whoami
+func (app *application) WhoAmIHandler(w http.ResponseWriter, r *http.Request) {
+	user := app.contextGetUser(r)
+
+	// If user is nil, respond with an unauthorized status.
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Create a response with the user's information.
+	userResponse := struct {
+		ID    int    `json:"id"`
+		Name  string `json:"name"`
+		Email string `json:"email"`
+		Role  string `json:"role"`
+	}{
+		ID:    int(user.ID),
+		Name:  user.FirstName + " " + user.LastName,
+		Email: user.Email,
+		Role:  user.Role,
+	}
+
+	err := app.writeJSON(w, http.StatusOK, envelope{"user": userResponse}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
 	}
 }

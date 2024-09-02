@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/araromirichard/internal/validator"
 	"github.com/julienschmidt/httprouter"
@@ -228,4 +229,15 @@ func (app *application) background(fn func()) {
 		//execute the arbituary func that was passwd as a parameter
 		fn()
 	}()
+}
+
+func (app *application) parseDateOfBirth(dateOfBirth *string) (*time.Time, error) {
+	if dateOfBirth != nil {
+		dob, err := time.Parse("2006-01-02", *dateOfBirth)
+		if err != nil {
+			return nil, err
+		}
+		return &dob, nil
+	}
+	return nil, nil
 }
