@@ -1,68 +1,85 @@
 {{define "subject"}}You are now verified and can host classes!{{end}}
+
 {{define "plainBody"}}
 Hi {{.tutorName}},
 
 Congratulations! Your account has been verified by our admin team.
 
-You can now start hosting classes and connecting with students on Ivywhiz.
+You can now start hosting classes and connecting with students on IvyWhiz.
 
 Thank you for your patience and welcome aboard!
 
 Best regards,
-The Ivywhiz Team
+The IvyWhiz Team
 {{end}}
+
 {{define "htmlBody"}}
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 
 <head>
-    <meta name="viewport" content="width=device-width" />
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>You are Verified! - IvyWhiz Smart Learning</title>
     <style>
-        /* Add some basic styling */
         body {
             font-family: Arial, sans-serif;
-            background-color: bisque;
-        }
-
-        .container {
+            background-color: #f4f4f4;
+            margin: 0;
             padding: 20px;
         }
 
-        .link {
-            background-color: #eeeeee;
-            color: white;
-            padding: 15px 32px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 16px;
-            margin: 4px 2px;
-            cursor: pointer;
-            border-radius: 4px;
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
 
-        .link:hover {
-            background-color: #850f0f;
+        h1 {
+            color: #333333;
+            font-size: 24px;
+            text-align: center;
+        }
+
+        p {
+            color: #555555;
+            font-size: 16px;
+        }
+
+        .footer {
+            font-size: 14px;
+            color: #777777;
+            text-align: left;
+            margin-top: 20px;
         }
 
         .logo {
             display: block;
-            margin: 0 auto;
-            max-width: 200px;
+            margin: 0 auto 20px auto;
+            max-width: 150px;
         }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <img src="{{.logoURL}}" alt="Logo" class="logo" onerror="this.onerror=null; this.src='https://logoipsum.com/logo/logo-7.svg'">
+        <img src="{{.logoURL}}" alt="IvyWhiz Logo" class="logo"
+            onerror="this.onerror=null; this.src='https://logoipsum.com/logo/logo-7.svg'">
+        <h1>You're Now Verified!</h1>
         <p>Hi {{.tutorName}},</p>
         <p>Congratulations! Your account has been verified by our admin team.</p>
-        <p>You can now start hosting classes and connecting with students on Ivywhiz.</p>
+        <p>You can now start hosting classes and connecting with students on IvyWhiz.</p>
         <p>Thank you for your patience and welcome aboard!</p>
-        <p>Best regards,</p>
-        <p>The Ivywhiz Team</p>
+        <p>Best regards,<br>
+            The IvyWhiz Team</p>
+
+        <div class="footer">
+            <p>Email: <a href="mailto:support@ivywhiztutoring@gmail.com">support@ivywhiztutoring@gmail.com</a><br>
+                Website: <a href="https://www.ivywhiztutoring.com">www.ivywhiztutoring.com</a></p>
+        </div>
     </div>
 </body>
 

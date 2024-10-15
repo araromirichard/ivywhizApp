@@ -18,15 +18,19 @@ func (app *application) routes() http.Handler {
 	//api route to ping
 	r.HandlerFunc(http.MethodGet, "/v1/healthcheck", app.HealthCheckHandler)
 
+	// Get all users By Role
+	r.HandlerFunc(http.MethodGet, "/v1/users-by-role", app.GetUserByRoleHandler)
+
 	// Authentications/ users
 	r.HandlerFunc(http.MethodPost, "/v1/auth/register", app.createUserHandler)
 	r.HandlerFunc(http.MethodPost, "/v1/auth/login", app.loginUserHandler)
+	r.HandlerFunc(http.MethodGet, "/v1/auth/verify-email-token", app.resendActivationTokenHandler)
+	r.HandlerFunc(http.MethodPost, "/v1/auth/forgot-password", app.ForgotPasswordHandler)
+	r.HandlerFunc(http.MethodPost, "/v1/auth/reset-password", app.ResetPasswordHandler)
 
 	//get current logged in user
 	r.HandlerFunc(http.MethodGet, "/v1/auth/whoami", app.requireActivatedUser(app.WhoAmIHandler))
-
 	r.HandlerFunc(http.MethodGet, "/v1/users", app.requirePermission("admin:access", app.ListUsersHandler))
-
 	r.HandlerFunc(http.MethodPut, "/v1/users/activate", app.activateUserHandler)
 	//upload to cloudinary
 	r.HandlerFunc(http.MethodPost, "/v1/photo-upload", app.uploadUserPhotoHandler)
@@ -56,10 +60,10 @@ func (app *application) routes() http.Handler {
 	// r.HandlerFunc(http.MethodGet, "/v1/tutors/:id/ratings", app.ListTutorRatingsHandler)
 
 	//Students Specific Routes
-	r.HandlerFunc(http.MethodPost, "/v1/students", app.requirePermission("student:access", app.CreateStudentHandler))
-	r.HandlerFunc(http.MethodGet, "/v1/students/:id", app.requirePermission("student:access", app.GetStudentHandler))
-	r.HandlerFunc(http.MethodPatch, "/v1/students/:id", app.requirePermission("student:access", app.UpdateStudentHandler))
-	r.HandlerFunc(http.MethodDelete, "/v1/students/:id", app.requirePermission("student:access", app.DeleteStudentHandler))
+	// r.HandlerFunc(http.MethodPost, "/v1/students", app.requirePermission("student:access", app.CreateStudentHandler))
+	// r.HandlerFunc(http.MethodGet, "/v1/students/:id", app.requirePermission("student:access", app.GetStudentHandler))
+	// r.HandlerFunc(http.MethodPatch, "/v1/students/:id", app.requirePermission("student:access", app.UpdateStudentHandler))
+	// r.HandlerFunc(http.MethodDelete, "/v1/students/:id", app.requirePermission("student:access", app.DeleteStudentHandler))
 
 	//Admin Specific Routes
 	r.HandlerFunc(http.MethodPatch, "/v1/admin/tutors/:id", app.requirePermission("admin:access", app.UpdateTutorVerificationHandler))

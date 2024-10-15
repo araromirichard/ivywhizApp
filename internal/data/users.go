@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"mime/multipart"
 	"strings"
 	"time"
@@ -23,27 +24,24 @@ var AnonymousUser = &User{}
 
 // User represents a user in the system
 type User struct {
-	ID             int64      `json:"id"`
-	Email          string     `json:"email"`
-	Password       password   `json:"-"`
-	FirstName      string     `json:"first_name"`
-	LastName       string     `json:"last_name"`
-	Username       string     `json:"username"`
-	Activated      bool       `json:"activated"`
-	Role           string     `json:"role"`
-	AboutYourself  *string    `json:"about_yourself,omitempty"`
-	DateOfBirth    *time.Time `json:"date_of_birth,omitempty"`
-	Gender         *string    `json:"gender,omitempty"`
-	StreetAddress1 *string    `json:"street_address_1,omitempty"`
-	StreetAddress2 *string    `json:"street_address_2,omitempty"`
-	City           *string    `json:"city,omitempty"`
-	State          *string    `json:"state,omitempty"`
-	Zipcode        *string    `json:"zipcode,omitempty"`
-	Country        *string    `json:"country,omitempty"`
-	Version        int        `json:"-"`
-	Photo          *UserPhoto `json:"photo,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID            int64      `json:"id"`
+	Email         string     `json:"email"`
+	Password      password   `json:"-"` // hashed password
+	FirstName     string     `json:"first_name"`
+	LastName      string     `json:"last_name"`
+	Username      string     `json:"username"`
+	Activated     bool       `json:"activated"`
+	Role          string     `json:"role"`
+	AboutYourself *string    `json:"about_yourself,omitempty"`
+	DateOfBirth   *time.Time `json:"date_of_birth,omitempty"`
+	Gender        *string    `json:"gender,omitempty"`
+	Address       *Address   `json:"address,omitempty"`  // Relationship to Address model
+	Student       *Student   `json:"student,omitempty"`  // Relationship to Student model, if under 18
+	Guardian      *Guardian  `json:"guardian,omitempty"` // Relationship to Guardian model, if under 18
+	Version       int        `json:"-"`
+	Photo         *UserPhoto `json:"photo,omitempty"` // optimistic locking
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 // Check if a User Instance is the AnonymousUser
@@ -63,49 +61,143 @@ type UserModel struct {
 
 // Insert a new user into the database
 func (m UserModel) Insert(u *User) error {
-	query := `
-		INSERT INTO users (
-			email, password, first_name, last_name, username, activated, created_at, updated_at,
-			role, about_yourself, date_of_birth, gender, street_address_1,
-			street_address_2, city, state, zipcode, country
-		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8,
-			$9, $10, $11, $12, $13, $14, $15,
-			$16, $17, $18
-		) RETURNING id, created_at, updated_at, version
-	`
-
-	args := []interface{}{
-		u.Email,
-		u.Password.hash,
-		u.FirstName,
-		u.LastName,
-		u.Username,
-		u.Activated,
-		u.CreatedAt,
-		u.UpdatedAt,
-		u.Role,
-		u.AboutYourself,
-		u.DateOfBirth,
-		u.Gender,
-		u.StreetAddress1,
-		u.StreetAddress2,
-		u.City,
-		u.State,
-		u.Zipcode,
-		u.Country,
+	// Start a transaction
+	tx, err := m.DB.Begin()
+	if err != nil {
+		return err
 	}
+
+	defer func() {
+		if err != nil {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				log.Printf("failed to rollback transaction: %v", rollbackErr)
+			}
+			log.Printf("failed to insert user: %v", err)
+		}
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt, &u.Version)
+
+	// Insert user query
+	queryUser := `
+		INSERT INTO users (
+			email, password, first_name, last_name, username, role, about_yourself, date_of_birth, gender, activated, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+		) RETURNING id, created_at, updated_at, version
+	`
+
+	argsUser := []interface{}{
+		u.Email, u.Password.hash, u.FirstName, u.LastName, u.Username, u.Role, u.AboutYourself, u.DateOfBirth, u.Gender, u.Activated,
+		u.CreatedAt, u.UpdatedAt,
+	}
+
+	err = tx.QueryRowContext(ctx, queryUser, argsUser...).Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt, &u.Version)
 	if err != nil {
-		switch {
-		case err.Error() == `pq: duplicate key value violates unique constraint "users_email_key"`:
+		if err.Error() == `pq: duplicate key value violates unique constraint "users_email_key"` {
 			return ErrDuplicateEmail
-		default:
-			return err
 		}
+		return fmt.Errorf("failed to insert user: %w", err)
+	}
+
+	// Insert address query if not nil
+	if u.Address != nil {
+		queryAddress := `
+			INSERT INTO addresses (user_id, street_address_1, street_address_2, city, state, zipcode, country, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, created_at, updated_at, version
+		`
+		argsAddress := []interface{}{
+			u.ID, u.Address.StreetAddress1, u.Address.StreetAddress2, u.Address.City, u.Address.State, u.Address.Zipcode, u.Address.Country, u.Address.CreatedAt, u.Address.UpdatedAt,
+		}
+
+		_, err = tx.ExecContext(ctx, queryAddress, argsAddress...)
+		if err != nil {
+			return fmt.Errorf("failed to insert address: %w", err)
+		}
+	}
+	// Insert student if role is student
+	if u.Role == "student" && u.Student != nil {
+		queryStudent := `
+					INSERT INTO students (ivw_id, user_id, family_background, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, $5)
+					RETURNING id, created_at, updated_at, version`
+		argsStudent := []interface{}{
+			u.Student.IvwID,
+			u.ID,
+			u.Student.FamilyBackground,
+			time.Now(),
+			time.Now(),
+		}
+
+		err = tx.QueryRowContext(ctx, queryStudent, argsStudent...).Scan(
+			&u.Student.ID,
+			&u.Student.CreatedAt,
+			&u.Student.UpdatedAt,
+			&u.Student.Version,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert student: %w", err)
+		}
+	}
+	// Insert guardian if not nil
+	if u.Guardian != nil {
+		queryGuardian := `
+					INSERT INTO guardians (student_id, first_name, last_name, relationship_to_student, phone, email, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+					RETURNING id, created_at, updated_at, version
+				`
+		argsGuardian := []interface{}{
+			u.Student.IvwID,
+			u.Guardian.FirstName,
+			u.Guardian.LastName,
+			u.Guardian.RelationshipToStudent,
+			u.Guardian.Phone,
+			u.Guardian.Email,
+			time.Now(),
+			time.Now(),
+		}
+
+		err = tx.QueryRowContext(ctx, queryGuardian, argsGuardian...).Scan(
+			&u.Guardian.ID,
+			&u.Guardian.CreatedAt,
+			&u.Guardian.UpdatedAt,
+			&u.Guardian.Version,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert guardian: %w", err)
+		}
+	}
+
+	// Insert user photo if not nil
+	if u.Photo != nil {
+		queryPhoto := `
+			INSERT INTO user_photos (user_id, photo_url, public_id, created_at)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id, created_at, version
+		`
+		argsPhoto := []interface{}{
+			u.ID,
+			u.Photo.URL,
+			u.Photo.PublicID,
+			time.Now(),
+		}
+
+		err = tx.QueryRowContext(ctx, queryPhoto, argsPhoto...).Scan(
+			&u.Photo.ID,
+			&u.Photo.CreatedAt,
+			&u.Photo.Version,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert user photo: %w", err)
+		}
+
+	}
+
+	// Commit the transaction
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil
@@ -113,7 +205,7 @@ func (m UserModel) Insert(u *User) error {
 
 func (m UserModel) GetAll(searchTerm string, classPreferences []string, filters Filters, activated *bool) ([]*User, Metadata, error) {
 	query := fmt.Sprintf(`
-		SELECT count(*) OVER() AS total_count, u.id, u.email, u.first_name, u.last_name, u.username, u.activated, u.role, u.country, u.state, u.city, u.created_at, u.updated_at, u.version,
+		SELECT count(*) OVER() AS total_count, u.id, u.email, u.first_name, u.last_name, u.username, u.activated, u.role, u.created_at, u.updated_at, u.version,
 		       up.photo_url AS photo_url, up.created_at AS photo_created_at, up.updated_at AS photo_updated_at
 		FROM users u
 		LEFT JOIN user_photos up ON u.id = up.user_id
@@ -173,9 +265,6 @@ func (m UserModel) GetAll(searchTerm string, classPreferences []string, filters 
 			&user.Username,
 			&user.Activated,
 			&user.Role,
-			&user.Country,
-			&user.State,
-			&user.City,
 			&user.CreatedAt,
 			&user.UpdatedAt,
 			&user.Version,
@@ -216,8 +305,7 @@ func (m UserModel) GetUser(id int64) (*User, error) {
 	}
 
 	query := `
-		SELECT u.id, u.email, u.first_name, u.last_name, u.username, u.activated, u.role, u.about_yourself, u.date_of_birth, u.gender,
-			   u.street_address_1, u.street_address_2, u.city, u.state, u.zipcode, u.country, u.created_at, u.updated_at, u.version,
+		SELECT u.id, u.email, u.first_name, u.last_name, u.username, u.activated, u.role, u.about_yourself, u.date_of_birth, u.gender, u.created_at, u.updated_at, u.version,
 			   up.photo_url AS photo_url, up.public_id, up.created_at AS photo_created_at, up.updated_at AS photo_updated_at
 		FROM users u
 		LEFT JOIN user_photos up ON u.id = up.user_id
@@ -245,12 +333,6 @@ func (m UserModel) GetUser(id int64) (*User, error) {
 		&user.AboutYourself,
 		&user.DateOfBirth,
 		&user.Gender,
-		&user.StreetAddress1,
-		&user.StreetAddress2,
-		&user.City,
-		&user.State,
-		&user.Zipcode,
-		&user.Country,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.Version,
@@ -280,7 +362,7 @@ func (m UserModel) GetUser(id int64) (*User, error) {
 	if photoUpdatedAt.Valid {
 		user.Photo.UpdatedAt = photoUpdatedAt.Time
 	}
-	
+
 	if photoPublicID.Valid {
 		user.Photo.PublicID = photoPublicID.String
 	}
@@ -291,8 +373,7 @@ func (m UserModel) GetUser(id int64) (*User, error) {
 // Get User by email
 func (m UserModel) GetUserByEmail(email string) (*User, error) {
 	query := `
-		SELECT id, email, password, first_name, last_name, username, activated, role, about_yourself, date_of_birth, gender, street_address_1,
-			street_address_2, city, state, zipcode, country, created_at, updated_at, version
+		SELECT id, email, password, first_name, last_name, username, activated, role, about_yourself, date_of_birth, gender, created_at, updated_at, version
 		FROM users
 		WHERE email = $1`
 
@@ -301,7 +382,7 @@ func (m UserModel) GetUserByEmail(email string) (*User, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	err := m.DB.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.Password.hash, &user.FirstName, &user.LastName, &user.Username, &user.Activated, &user.Role, &user.AboutYourself, &user.DateOfBirth, &user.Gender, &user.StreetAddress1, &user.StreetAddress2, &user.City, &user.State, &user.Zipcode, &user.Country, &user.CreatedAt, &user.UpdatedAt, &user.Version)
+	err := m.DB.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.Password.hash, &user.FirstName, &user.LastName, &user.Username, &user.Activated, &user.Role, &user.AboutYourself, &user.DateOfBirth, &user.Gender, &user.CreatedAt, &user.UpdatedAt, &user.Version)
 	if err != nil {
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
@@ -322,15 +403,101 @@ func (m UserModel) GetUserByEmail(email string) (*User, error) {
 	return &user, nil
 }
 
+// Get User By Role
+func (m UserModel) GetUserByRole(role string, searchTerm string, filters Filters) ([]*User, Metadata, error) {
+	query := fmt.Sprintf(`
+        SELECT count(*) OVER() AS total_count, u.id, u.email, u.first_name, u.last_name, u.username, u.activated, u.role, u.about_yourself, u.date_of_birth, u.gender, u.created_at, u.updated_at, u.version,
+               up.photo_url AS photo_url, up.created_at AS photo_created_at, up.updated_at AS photo_updated_at
+        FROM users u
+        LEFT JOIN user_photos up ON u.id = up.user_id
+        WHERE u.role = $1 AND (
+            $2 = '' OR
+            to_tsvector('simple', COALESCE(u.email, '')) @@ plainto_tsquery('simple', $2) OR
+            to_tsvector('simple', COALESCE(u.first_name, '')) @@ plainto_tsquery('simple', $2) OR
+            to_tsvector('simple', COALESCE(u.last_name, '')) @@ plainto_tsquery('simple', $2) OR
+            to_tsvector('simple', COALESCE(u.username, '')) @@ plainto_tsquery('simple', $2)
+        )
+        ORDER BY %s %s, u.id ASC
+        LIMIT $3 OFFSET $4
+    `, filters.SortColumn(), filters.SortDirection())
+
+	args := []interface{}{
+		role,
+		searchTerm,
+		filters.PageSize,
+		filters.offset(),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	rows, err := m.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, Metadata{}, err
+	}
+	defer rows.Close()
+
+	users := []*User{}
+	totalRecords := 0
+
+	for rows.Next() {
+		var user User
+		var photoURL sql.NullString
+		var photoCreatedAt, photoUpdatedAt sql.NullTime
+
+		err = rows.Scan(
+			&totalRecords,
+			&user.ID,
+			&user.Email,
+			&user.FirstName,
+			&user.LastName,
+			&user.Username,
+			&user.Activated,
+			&user.Role,
+			&user.AboutYourself,
+			&user.DateOfBirth,
+			&user.Gender,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+			&user.Version,
+			&photoURL,
+			&photoCreatedAt,
+			&photoUpdatedAt,
+		)
+		if err != nil {
+			return nil, Metadata{}, err
+		}
+
+		if photoURL.Valid {
+			user.Photo = &UserPhoto{
+				URL:       photoURL.String,
+				CreatedAt: photoCreatedAt.Time,
+				UpdatedAt: photoUpdatedAt.Time,
+			}
+		} else {
+			user.Photo = nil
+		}
+
+		users = append(users, &user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, Metadata{}, err
+	}
+
+	metadata := calculateMetadata(totalRecords, filters.Page, filters.PageSize)
+	return users, metadata, nil
+}
+
 // Update User
 func (m UserModel) UpdateUser(user *User) error {
 	query := `
-		UPDATE users
-		SET email = $1, password = $2, first_name = $3, last_name = $4, username = $5, activated = $6, role = $7, about_yourself = $8, date_of_birth = $9, gender = $10, street_address_1 = $11,
-			street_address_2 = $12, city = $13, state = $14, zipcode = $15, country = $16, updated_at = NOW(), version = version + 1
-		WHERE id = $17 AND version = $18
-		RETURNING version
-	`
+    UPDATE users
+    SET email = $1, password = $2, first_name = $3, last_name = $4, username = $5, 
+        activated = $6, role = $7, about_yourself = $8, date_of_birth = $9, gender = $10, 
+        updated_at = NOW(), version = version + 1
+    WHERE id = $11 AND version = $12
+    RETURNING version`
 
 	args := []interface{}{
 		user.Email,
@@ -343,18 +510,13 @@ func (m UserModel) UpdateUser(user *User) error {
 		user.AboutYourself,
 		user.DateOfBirth,
 		user.Gender,
-		user.StreetAddress1,
-		user.StreetAddress2,
-		user.City,
-		user.State,
-		user.Zipcode,
-		user.Country,
 		user.ID,
 		user.Version,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
+
 	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&user.Version)
 	if err != nil {
 		switch {
@@ -365,8 +527,8 @@ func (m UserModel) UpdateUser(user *User) error {
 		default:
 			return err
 		}
-
 	}
+
 	return nil
 }
 
@@ -427,8 +589,8 @@ func (p *password) Match(plaintextPassword string) (bool, error) {
 
 // validation checks
 func ValidateEmail(v *validator.Validator, email string) {
-	v.Check(email != "", "email", "email must be provided")
-	v.Check(validator.Matches(email, validator.EmailRX), "email", "email must be a valid email address")
+	v.Check(email != "", "email", "must be provided")
+	v.Check(validator.Matches(email, validator.EmailRX), "email", "must be a valid email address")
 }
 
 func ValidatePasswordPlaintext(v *validator.Validator, password string) {
@@ -443,22 +605,59 @@ func ValidateUser(v *validator.Validator, user *User) {
 	v.Check(user.LastName != "", "lastname", "must be provided")
 	v.Check(len(user.LastName) <= 500, "lastname", "must not be more than 500 bytes long")
 
-	//call the stand alone validateEmail function
+	// Validate email
 	ValidateEmail(v, user.Email)
 
-	//if the plaintext password is not nil, then call the stand alone validatePassword function
+	// Validate password if plaintext is present
 	if user.Password.plaintext != nil {
 		ValidatePasswordPlaintext(v, *user.Password.plaintext)
 	}
 
-	// If the password hash is ever nil, this will be due to a logic error in our
-	// codebase (probably because we forgot to set a password for the user). It's a
-	// useful sanity check to include here, but it's not a problem with the data
-	// provided by the client. So rather than adding an error to the validation map we
-	// raise a panic instead.
+	// Check password hash for sanity
 	if user.Password.hash == nil {
 		panic("missing password hash for user")
 	}
+
+	// Student-specific validations
+	if user.Role == "student" {
+		//v.Check(user.Student != nil, "student", "Student details are required")
+		if user.Student != nil {
+			v.Check(user.Student.IvwID != "", "student_id", "must be provided")
+			v.Check(user.Student.FamilyBackground != nil, "family background", "must be provided")
+		}
+	}
+
+	// Age and guardian validation for students
+	if user.Role == "student" && user.DateOfBirth != nil {
+		age := calculateAge(*user.DateOfBirth)
+		if age < 18 {
+			// Guardian details are required for users under 18
+			v.Check(user.Guardian != nil, "guardian", "Guardian details are required for users under 18")
+			if user.Guardian != nil {
+				ValidateGuardian(v, user.Guardian)
+			}
+		}
+	}
+
+	// Age validation for tutors to maek sure they are 18+
+	if user.Role == "tutor" && user.DateOfBirth != nil {
+		age := calculateAge(*user.DateOfBirth)
+		if age < 18 {
+			v.Check(false, "age", "Tutors must be at least 18 years old")
+		}
+	}
+
+}
+
+// Guardian validation logic
+func ValidateGuardian(v *validator.Validator, guardian *Guardian) {
+	v.Check(guardian.FirstName != "", "guardian.first_name", "Guardian first name is required")
+	v.Check(len(guardian.FirstName) <= 500, "guardian.first_name", "Guardian first name is required")
+	v.Check(len(guardian.LastName) <= 500, "guardian.last_name", "Guardian last name is required")
+	v.Check(guardian.LastName != "", "guardian.last_name", "Guardian last name is required")
+	v.Check(guardian.RelationshipToStudent != "", "guardian.relationship_to_student", "Guardian relationship to student is required")
+	v.Check(guardian.Phone != "", "guardian.phone", "Guardian phone is required")
+	ValidateEmail(v, guardian.Email)
 }
 
 // ValidateImage checks the image file for size and type
@@ -481,21 +680,36 @@ func ValidateImage(v *validator.Validator, filename string, fileHeader *multipar
 	v.Check(validType, "file", "file type should be PNG, JPG, JPEG, or GIF")
 }
 
+func calculateAge(dob time.Time) int {
+	now := time.Now()
+	age := now.Year() - dob.Year()
+	if now.YearDay() < dob.YearDay() {
+		age--
+	}
+	return age
+}
+
 func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error) {
-	// Calculate the token hash
 	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
 
 	query := `
-		SELECT users.id, users.email, users.password, users.first_name, users.last_name, users.username,
-		       users.activated, users.role, users.about_yourself, users.date_of_birth, users.gender,
-		       users.street_address_1, users.street_address_2, users.city, users.state, users.zipcode,
-		       users.country, users.created_at, users.updated_at, users.version
-		FROM users
-		INNER JOIN tokens ON users.id = tokens.user_id
-		WHERE tokens.hash = $1 AND tokens.scope = $2 AND tokens.expiry > $3
-	`
+    SELECT u.id, u.email, u.password, u.first_name, u.last_name, u.username,
+           u.activated, u.role, u.about_yourself, u.date_of_birth, u.gender,
+           u.created_at, u.updated_at, u.version,
+           up.photo_url, up.public_id, up.created_at AS photo_created_at, up.updated_at AS photo_updated_at,
+           a.id AS address_id, a.street_address_1, a.street_address_2, a.city, a.state, a.zipcode, a.country,
+           s.id AS student_id, s.ivw_id, s.family_background,
+           g.id AS guardian_id, g.first_name AS guardian_first_name, g.last_name AS guardian_last_name,
+           g.relationship_to_student, g.phone AS guardian_phone, g.email AS guardian_email
+    FROM users u
+    INNER JOIN tokens ON u.id::bigint = tokens.user_id::bigint
+    LEFT JOIN user_photos up ON u.id::bigint = up.user_id::bigint
+    LEFT JOIN addresses a ON u.id::bigint = a.user_id::bigint
+    LEFT JOIN students s ON u.id::bigint = s.user_id::bigint
+    LEFT JOIN guardians g ON s.id::bigint = g.student_id::bigint
+    WHERE tokens.hash = $1 AND tokens.scope = $2 AND tokens.expiry > $3
+    `
 
-	// Define arguments for the query
 	args := []interface{}{
 		tokenHash[:],
 		tokenScope,
@@ -503,17 +717,25 @@ func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error)
 	}
 
 	var user User
+	var photoURL, photoPublicID sql.NullString
+	var photoCreatedAt, photoUpdatedAt sql.NullTime
+	var address Address
+	var student Student
+	var guardian Guardian
+	var studentID, guardianID sql.NullInt64
+	var ivwID, familyBackground, guardianFirstName, guardianLastName, guardianRelationship, guardianPhone, guardianEmail sql.NullString
 
-	// Context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	// Execute the query and scan the results into the user struct
 	err := m.DB.QueryRowContext(ctx, query, args...).Scan(
 		&user.ID, &user.Email, &user.Password.hash, &user.FirstName, &user.LastName, &user.Username,
-		&user.Activated, &user.Role, &user.AboutYourself, &user.DateOfBirth,
-		&user.Gender, &user.StreetAddress1, &user.StreetAddress2, &user.City, &user.State,
-		&user.Zipcode, &user.Country, &user.CreatedAt, &user.UpdatedAt, &user.Version,
+		&user.Activated, &user.Role, &user.AboutYourself, &user.DateOfBirth, &user.Gender,
+		&user.CreatedAt, &user.UpdatedAt, &user.Version,
+		&photoURL, &photoPublicID, &photoCreatedAt, &photoUpdatedAt,
+		&address.ID, &address.StreetAddress1, &address.StreetAddress2, &address.City, &address.State, &address.Zipcode, &address.Country,
+		&studentID, &ivwID, &familyBackground,
+		&guardianID, &guardianFirstName, &guardianLastName, &guardianRelationship, &guardianPhone, &guardianEmail,
 	)
 
 	if err != nil {
@@ -525,6 +747,39 @@ func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error)
 		}
 	}
 
-	// Return the matching user.
+	if photoURL.Valid {
+		user.Photo = &UserPhoto{
+			URL:       photoURL.String,
+			PublicID:  photoPublicID.String,
+			CreatedAt: photoCreatedAt.Time,
+			UpdatedAt: photoUpdatedAt.Time,
+		}
+	}
+
+	if address.ID != 0 {
+		user.Address = &address
+	}
+
+	if studentID.Valid {
+		student.ID = studentID.Int64
+		if ivwID.Valid {
+			student.IvwID = ivwID.String
+		}
+		if familyBackground.Valid {
+			student.FamilyBackground = &familyBackground.String
+		}
+		user.Student = &student
+
+		if guardianID.Valid {
+			guardian.ID = guardianID.Int64
+			guardian.FirstName = guardianFirstName.String
+			guardian.LastName = guardianLastName.String
+			guardian.RelationshipToStudent = guardianRelationship.String
+			guardian.Phone = guardianPhone.String
+			guardian.Email = guardianEmail.String
+			user.Guardian = &guardian
+		}
+	}
+
 	return &user, nil
 }

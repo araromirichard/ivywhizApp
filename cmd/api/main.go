@@ -15,8 +15,8 @@ import (
 	"github.com/araromirichard/internal/notification"
 	"github.com/araromirichard/internal/uploader"
 	"github.com/joho/godotenv"
-	"github.com/pusher/pusher-http-go/v5"
 	_ "github.com/lib/pq" // Import the PostgreSQL driver
+	"github.com/pusher/pusher-http-go/v5"
 )
 
 // version declares a constant holding the application version number
@@ -89,7 +89,8 @@ func main() {
 	flag.StringVar(&adminPassword, "admin-password", "IvywhizPass123", "Password for the default admin user")
 
 	// Database configuration
-	flag.StringVar(&cfg.db.dsn, "db-dsn", "postgres://postgres:OCuG1gml5uvgF2U@ivywhizdb.flycast:5432/postgres?sslmode=disable", "PostgreSQL DSN")
+	// flag.StringVar(&cfg.db.dsn, "db-dsn", "postgres://postgres:OCuG1gml5uvgF2U@ivywhizdb.flycast:5432/postgres?sslmode=disable", "PostgreSQL DSN")
+	flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("IVYWHIZ_DB_DSN"), "PostgreSQL DSN")
 	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "PostgreSQL max open connections")
 	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "PostgreSQL max idle connections")
 	flag.StringVar(&cfg.db.maxIdleTime, "db-max-idle-time", "15m", "PostgreSQL max connection idle time")
@@ -109,7 +110,7 @@ func main() {
 	flag.IntVar(&cfg.smtp.port, "smtp-port", 587, "SMTP port")
 	flag.StringVar(&cfg.smtp.username, "smtp-username", os.Getenv("SMTP_USER"), "SMTP username")
 	flag.StringVar(&cfg.smtp.password, "smtp-password", os.Getenv("SMTP_PASS"), "SMTP password")
-	flag.StringVar(&cfg.smtp.sender, "smtp-sender", "IVYWHIZ <no-reply@Ivywhiz.krobotechnologies.com>", "SMTP sender")
+	flag.StringVar(&cfg.smtp.sender, "smtp-sender", "IVYWHIZ <no-reply@ivywhiztutoring.com>", "SMTP sender")
 
 	// CORS configuration
 	flag.Func("cors-trusted-origins", "Trusted CORS origins (space separated)", func(val string) error {

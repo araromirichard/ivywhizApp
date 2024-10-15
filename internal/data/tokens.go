@@ -6,14 +6,14 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base32"
-	"time"
-
+	"fmt"
 	"github.com/araromirichard/internal/validator"
+	"time"
 )
 
 const (
 	ScopeActivation = "activation"
-
+	ScopePasswordReset = "resetpassword"
 	ScopeAuthentication = "authentication"
 )
 
@@ -111,6 +111,19 @@ func (tm TokenModel) DeleteAllForUser(scope string, userID int64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	_, err := tm.DB.ExecContext(ctx, query, scope, userID)
-	return err
+	result, err := tm.DB.ExecContext(ctx, query, scope, userID)
+	if err != nil {
+		return fmt.Errorf("unable to delete tokens for user: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error getting rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrNoTokensFound
+	}
+
+	return nil
 }

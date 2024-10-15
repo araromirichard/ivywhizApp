@@ -218,8 +218,7 @@ func (tm *TutorModel) GetByID(ivwID string) (*Tutor, error) {
 		&tutor.CriminalRecord, &tutor.Timezone,
 		&user.ID, &user.Email, &user.FirstName, &user.LastName, &user.Username,
 		&user.Activated, &user.CreatedAt, &user.UpdatedAt, &user.Role, &user.AboutYourself,
-		&user.DateOfBirth, &user.Gender, &user.StreetAddress1, &user.StreetAddress2, &user.City,
-		&user.State, &user.Zipcode, &user.Country, &user.Version, &photoURL,
+		&user.DateOfBirth, &user.Gender, &user.Version, &photoURL,
 		&languages, &educationJSON, &scheduleJSON, &employmentJSON, &ratingsJSON, &skills,
 	)
 	if err != nil {

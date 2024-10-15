@@ -63,7 +63,6 @@ func (app *application) CreateTutorHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	
 	// Create the notification payload
 	notificationPayload := map[string]interface{}{
 		"tutor_id": tutor.IvwID,
@@ -74,6 +73,13 @@ func (app *application) CreateTutorHandler(w http.ResponseWriter, r *http.Reques
 	// Send notification to the admin channel
 	if err := app.notify.SendNotification("adminChannel", "NewTuutor", notificationPayload); err != nil {
 		app.serverErrorResponse(w, r, fmt.Errorf("error sending notification: %w", err))
+		return
+	}
+
+	// Grant tutor permissions
+	err = app.models.Permissions.AddForUser(user.ID, "tutor:access")
+	if err != nil {
+		app.logger.PrintError(err, nil)
 		return
 	}
 
@@ -743,14 +749,12 @@ func (app *application) UpdateTutorVerificationHandler(w http.ResponseWriter, r 
 		app.serverErrorResponse(w, r, err)
 		return
 	}
-	
-	
-		
+
 	// Create the notification payload
 	notificationPayload := map[string]interface{}{
-		"title":    "Congratulations!",
-		"name":     tutor.FirstName + " " + tutor.LastName,
-		"message":  "You have been verified as a tutor.",
+		"title":   "Congratulations!",
+		"name":    tutor.FirstName + " " + tutor.LastName,
+		"message": "You have been verified as a tutor.",
 	}
 
 	// Send notification to the admin channel
@@ -758,7 +762,6 @@ func (app *application) UpdateTutorVerificationHandler(w http.ResponseWriter, r 
 		app.serverErrorResponse(w, r, fmt.Errorf("error sending notification: %w", err))
 		return
 	}
-	
 
 	// Send email asynchronously
 	app.background(func() {
@@ -778,6 +781,4 @@ func (app *application) UpdateTutorVerificationHandler(w http.ResponseWriter, r 
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}
-
-
 }

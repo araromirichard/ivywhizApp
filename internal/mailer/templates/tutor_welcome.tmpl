@@ -1,0 +1,107 @@
+{{define "subject"}}Welcome to IvyWhiz Smart Learning, Tutor!{{end}}
+
+{{define "plainBody"}}
+Dear {{.firstName}},
+
+Thank you for joining IvyWhiz Smart Learning as a tutor. We're excited to have you as part of our team and look forward
+to working together to empower students on their academic journeys.
+
+To complete your registration, please confirm your email address by copying and pasting this link into your browser:
+https://www.ivywhiztutoring.com/verify-email?token={{.activationToken}}
+
+If the above link doesn't work, you can copy and paste this link into your browser:
+https://www.ivywhiztutoring.com/verify-email?token={{.activationToken}}
+
+If this is an error, please ignore this email.
+
+Thank you,
+IvyWhiz Smart Learning Team
+{{end}}
+
+{{define "htmlBody"}}
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to IvyWhiz Smart Learning, Tutor!</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #333333;
+            font-size: 24px;
+            text-align: center;
+        }
+
+        p {
+            color: #555555;
+            font-size: 16px;
+        }
+
+        .button {
+            display: inline-block;
+            background-color: #A742F6;
+            color: #ffffff;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+
+        .footer {
+            font-size: 14px;
+            color: #777777;
+            text-align: left;
+            margin-top: 20px;
+        }
+
+        .logo {
+            display: block;
+            margin: 0 auto 20px auto;
+            max-width: 150px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <img src="{{.logoURL}}" alt="IvyWhiz Logo" class="logo"
+            onerror="this.onerror=null; this.src='https://logoipsum.com/logo/logo-7.svg'">
+        <h1>Welcome to IvyWhiz Smart Learning, Tutor!</h1>
+        <p>Dear {{.firstName}},</p>
+        <p>Thank you for joining IvyWhiz Smart Learning as a tutor. We're excited to have you as part of our team and
+            look forward to working together to empower students on their academic journeys.</p>
+        <p>To complete your registration, please confirm your email address by clicking the link below:</p>
+        <a href="https://www.ivywhiztutoring.com/verify-email?token={{.activationToken}}" class="button">Confirm Your
+            Email</a>
+        <p>If the button above doesn't work, you can copy and paste this link into your browser:</p>
+        <p><a href="https://www.ivywhiztutoring.com/verify-email?token={{.activationToken}}>https://www.ivywhiztutoring.com/verify-email?token={{.activationToken}}</a></p>
+        <p>If this is an error, please ignore this email.</p>
+        <p>Thank you,<br>
+            IvyWhiz Smart Learning Team</p>
+
+        <div class=" footer">
+                <p>Email: <a href="mailto:support@ivywhiztutoring@gmail.com">support@ivywhiztutoring@gmail.com</a><br>
+                    Website: <a href="https://www.ivywhiztutoring.com">www.ivywhiztutoring.com</a></p>
+    </div>
+    </div>
+</body>
+
+</html>
+{{end}}

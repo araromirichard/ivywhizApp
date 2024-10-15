@@ -10,6 +10,7 @@ import (
 var (
 	ErrRecordNotFound = errors.New("record not found")
 	ErrEditConflict   = errors.New("edit conflict")
+	ErrNoTokensFound = errors.New("no tokens found for the given user and scope")
 )
 
 type Models struct {
@@ -19,6 +20,8 @@ type Models struct {
 	UserPhoto   UserPhotoModel
 	Tokens      TokenModel
 	Permissions PermissionModel
+	Address     AddressModel
+	Guardians   GuardianModel
 }
 
 func NewModels(db *sql.DB) Models {
@@ -29,5 +32,7 @@ func NewModels(db *sql.DB) Models {
 		UserPhoto:   UserPhotoModel{DB: db},
 		Tokens:      TokenModel{DB: db},
 		Permissions: PermissionModel{DB: db},
+		Address:     AddressModel{DB: db},
+		Guardians:   GuardianModel{DB: db},
 	}
 }

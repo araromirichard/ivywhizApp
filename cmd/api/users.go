@@ -11,62 +11,57 @@ import (
 )
 
 func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request) {
-	// Create an anonymous struct to hold the data
 	var input struct {
-		FirstName      string  `json:"first_name"`
-		LastName       string  `json:"last_name"`
-		Username       string  `json:"username"`
-		Email          string  `json:"email"`
-		Password       string  `json:"password"`
-		Role           string  `json:"role"`
-		DateOfBirth    *string `json:"date_of_birth,omitempty"`
-		Gender         *string `json:"gender,omitempty"`
-		StreetAddress1 *string `json:"street_address_1,omitempty"`
-		StreetAddress2 *string `json:"street_address_2,omitempty"`
-		City           *string `json:"city,omitempty"`
-		State          *string `json:"state,omitempty"`
-		Country        *string `json:"country,omitempty"`
-		Zipcode        *string `json:"zipcode,omitempty"`
+		FirstName   string          `json:"first_name"`
+		LastName    string          `json:"last_name"`
+		Username    string          `json:"username"`
+		Email       string          `json:"email"`
+		Password    string          `json:"password"`
+		Role        string          `json:"role"`
+		DateOfBirth *string         `json:"date_of_birth,omitempty"`
+		Gender      *string         `json:"gender,omitempty"`
+		Address     *data.Address   `json:"address,omitempty"`
+		Guardian    *data.Guardian  `json:"guardian,omitempty"`
+		Student     *data.Student   `json:"student,omitempty"`
+		Photo       *data.UserPhoto `json:"photo,omitempty"`
 	}
 
-	// Read and decode the JSON request body into the input struct
 	err := app.readJSON(w, r, &input)
 	if err != nil {
 		app.badRequestResponse(w, r, err)
 		return
 	}
 
-	// Parse the DateOfBirth string into a time.Time pointer if it's not nil
 	dateOfBirth, err := app.parseDateOfBirth(input.DateOfBirth)
 	if err != nil {
 		app.badRequestResponse(w, r, err)
+		return
 	}
 
-	// Initialize a new User struct with the provided data
 	user := &data.User{
-		FirstName:      input.FirstName,
-		LastName:       input.LastName,
-		Username:       input.Username,
-		Email:          input.Email,
-		Role:           input.Role,
-		DateOfBirth:    dateOfBirth,
-		Gender:         input.Gender,
-		StreetAddress1: input.StreetAddress1,
-		StreetAddress2: input.StreetAddress2,
-		City:           input.City,
-		State:          input.State,
-		Zipcode:        input.Zipcode,
-		Activated:      false, // New users are not activated by default
+		FirstName:   input.FirstName,
+		LastName:    input.LastName,
+		Username:    input.Username,
+		Email:       input.Email,
+		Role:        input.Role,
+		DateOfBirth: dateOfBirth,
+		Gender:      input.Gender,
+		Activated:   false,
+		Address:     input.Address,
+		Guardian:    input.Guardian,
+		Student:     input.Student,
 	}
 
-	// Hash the password and set it in the user struct
+	if user.Role == "student" && user.Student != nil {
+		user.Student.IvwID = app.createAppID("ivws")
+	}
+
 	err = user.Password.Set(input.Password)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// Validate the user data
 	v := validator.New()
 	data.ValidateUser(v, user)
 	if !v.Valid() {
@@ -74,7 +69,6 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Insert the user into the database
 	err = app.models.Users.Insert(user)
 	if err != nil {
 		switch {
@@ -87,51 +81,31 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	//grant permissions based on role
-	switch user.Role {
-	case "admin":
-		err = app.models.Permissions.AddForUser(user.ID, "admin:access")
-		if err != nil {
-			app.serverErrorResponse(w, r, err)
-			return
-		}
-	case "tutor":
-		err = app.models.Permissions.AddForUser(user.ID, "tutor:access")
-		if err != nil {
-			app.serverErrorResponse(w, r, err)
-			return
-		}
-	case "student":
-		err = app.models.Permissions.AddForUser(user.ID, "student:access")
-		if err != nil {
-			app.serverErrorResponse(w, r, err)
-			return
-		}
-	}
-
-	// Generate an activation token for this user
 	token, err := app.models.Tokens.New(user.ID, 3*24*time.Hour, data.ScopeActivation)
 	if err != nil {
-
-		app.serverErrorResponse(w, r, fmt.Errorf("error generating token: %w", err))
+		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// Send email asynchronously
 	app.background(func() {
 		data := map[string]interface{}{
 			"activationToken": token.Plaintext,
-			"userID":          user.ID,
+			"firstName":       user.FirstName,
 			"logoURL":         "https://res.cloudinary.com/dbm6gjv59/image/upload/v1721847638/Group_1_i6y4u4.png",
 		}
-		err := app.mailer.Send(user.Email, "user_welcome.tmpl", data)
+		if user.Role == "student" {
+			err = app.mailer.Send(user.Email, "student_welcome.tmpl", data)
+		}
+
+		if user.Role == "tutor" {
+			err = app.mailer.Send(user.Email, "tutor_welcome.tmpl", data)
+		}
 		if err != nil {
 			app.logger.PrintError(err, nil)
 		}
 	})
 
-	message := "Kindly check your email for an activation link"
-	err = app.writeJSON(w, http.StatusAccepted, envelope{"message": message}, nil)
+	err = app.writeJSON(w, http.StatusCreated, envelope{"message": "User created successfully. Please check your email for activation instructions."}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}
@@ -166,7 +140,7 @@ func (app *application) initAdminUser(firstName, lastName, email, password strin
 		return fmt.Errorf("failed to set password for admin user: %w", err)
 	}
 
-	// Insert the admin user into the database
+	// Since this is an admin, no address, guardian, or student is provided, so we pass nil for those fields
 	err = app.models.Users.Insert(user)
 	if err != nil {
 		app.logger.PrintError(err, nil)
@@ -394,24 +368,6 @@ func (app *application) UpdateUserByIdHandler(w http.ResponseWriter, r *http.Req
 	if input.Role != "" {
 		user.Role = input.Role
 	}
-	if input.StreetAddress1 != nil {
-		user.StreetAddress1 = input.StreetAddress1
-	}
-	if input.StreetAddress2 != nil {
-		user.StreetAddress2 = input.StreetAddress2
-	}
-	if input.City != nil {
-		user.City = input.City
-	}
-	if input.State != nil {
-		user.State = input.State
-	}
-	if input.Country != nil {
-		user.Country = input.Country
-	}
-	if input.Zipcode != nil {
-		user.Zipcode = input.Zipcode
-	}
 
 	if input.DateOfBirth != nil {
 		dateOfBirth, err := app.parseDateOfBirth(input.DateOfBirth)
@@ -464,19 +420,166 @@ func (app *application) DeleteUserByIdHandler(w http.ResponseWriter, r *http.Req
 	}
 
 }
+func (app *application) GetUserByRoleHandler(w http.ResponseWriter, r *http.Request) {
+	// Get the role from the query parameters
+	role := r.URL.Query().Get("role")
+	if role == "" {
+		app.badRequestResponse(w, r, errors.New("missing role query parameter"))
+		return
+	}
 
-// // get user by role
-// func (app *application) GetUserByRoleHandler(w http.ResponseWriter, r *http.Request) {}
+	var input struct {
+		SearchTerm string
+		data.Filters
+	}
 
-// // forgot password
-// func (app *application) ForgotPasswordHandler(w http.ResponseWriter, r *http.Request) {}
+	v := validator.New()
 
-// // reset password
-// func (app *application) ResetPasswordHandler(w http.ResponseWriter, r *http.Request) {}
+	qs := r.URL.Query()
+
+	input.SearchTerm = app.readString(qs, "search_term", "")
+	input.Filters.Page = app.readInt(qs, "page", 1, v)
+	input.Filters.PageSize = app.readInt(qs, "page_size", 20, v)
+	input.Filters.Sort = app.readString(qs, "sort", "id")
+	input.Filters.SortSafeList = []string{"id", "first_name", "last_name", "email", "-id", "-first_name", "-last_name", "-email"}
+
+	if data.ValidateFilters(v, input.Filters); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	// Get users by role from the database with search and filters
+	users, metadata, err := app.models.Users.GetUserByRole(role, input.SearchTerm, input.Filters)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// If no users found, return a not found response
+	if len(users) == 0 {
+		app.NotFoundResponse(w, r)
+		return
+	}
+
+	// Write the users and metadata to the response
+	err = app.writeJSON(w, http.StatusOK, envelope{"users": users, "metadata": metadata}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
+
+// forgot password
+func (app *application) ForgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Email string `json:"email"`
+	}
+
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	user, err := app.models.Users.GetUserByEmail(input.Email)
+	if err != nil {
+		if errors.Is(err, data.ErrRecordNotFound) {
+			app.NotFoundResponse(w, r)
+		} else {
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	// Generate a password reset token
+	token, err := app.models.Tokens.New(user.ID, 24*time.Hour, data.ScopePasswordReset)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Send password reset email
+	app.background(func() {
+		data := map[string]interface{}{
+			"resetToken": token.Plaintext,
+			"firstName":  user.FirstName,
+		}
+		err = app.mailer.Send(user.Email, "password_reset.tmpl", data)
+		if err != nil {
+			app.logger.PrintError(err, nil)
+		}
+	})
+
+	env := envelope{"message": "If a matching account was found, a password reset email has been sent"}
+	err = app.writeJSON(w, http.StatusAccepted, env, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
+
+// reset password
+func (app *application) ResetPasswordHandler(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		TokenPlaintext  string `json:"token"`
+		NewPassword     string `json:"new_password"`
+		ConfirmPassword string `json:"confirm_password"`
+	}
+
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	if input.NewPassword != input.ConfirmPassword {
+		app.badRequestResponse(w, r, errors.New("passwords do not match"))
+		return
+	}
+
+	v := validator.New()
+	if data.ValidateTokenPlaintext(v, input.TokenPlaintext); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	user, err := app.models.Users.GetForToken(data.ScopePasswordReset, input.TokenPlaintext)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			v.AddError("token", "Invalid or expired activation token")
+			app.failedValidationResponse(w, r, v.Errors)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	err = user.Password.Set(input.NewPassword)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.models.Users.UpdateUser(user)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.models.Tokens.DeleteAllForUser(data.ScopePasswordReset, user.ID)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	env := envelope{"message": "Password reset successful"}
+	err = app.writeJSON(w, http.StatusOK, env, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
 
 // // activate user
 func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse the plaintext activation token from the request Body.
 	var input struct {
 		TokenPlaintext string `json:"token"`
 	}
@@ -487,21 +590,17 @@ func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Validate the plaintext token.
 	v := validator.New()
 	if data.ValidateTokenPlaintext(v, input.TokenPlaintext); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
-	// retrieve the details of the user associated with the activation token
-	// if no record is found send an invalid token response
 	user, err := app.models.Users.GetForToken(data.ScopeActivation, input.TokenPlaintext)
-
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):
-			v.AddError("token", "Invalid or Expired Activation Token")
+			v.AddError("token", "Invalid or expired activation token")
 			app.failedValidationResponse(w, r, v.Errors)
 		default:
 			app.serverErrorResponse(w, r, err)
@@ -509,36 +608,23 @@ func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	//update the user record to set the activated field to true
 	user.Activated = true
 
-	//save the updated user record to the db
-	//check for edit conflicts
 	err = app.models.Users.UpdateUser(user)
 	if err != nil {
-		switch {
-		case errors.Is(err, data.ErrEditConflict):
-			app.editConflictResponse(w, r)
-		default:
-			app.serverErrorResponse(w, r, err)
-
-		}
-
+		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// if everything went well, then delete all activation tokens for the user
 	err = app.models.Tokens.DeleteAllForUser(data.ScopeActivation, user.ID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// send the updated user details to the client in the json response
 	err = app.writeJSON(w, http.StatusOK, envelope{"user": user}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
-		return
 	}
 }
 
@@ -554,19 +640,77 @@ func (app *application) WhoAmIHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create a response with the user's information.
 	userResponse := struct {
-		ID    int    `json:"id"`
-		Name  string `json:"name"`
-		Email string `json:"email"`
-		Role  string `json:"role"`
+		ID        int    `json:"id"`
+		Name      string `json:"name"`
+		Email     string `json:"email"`
+		Role      string `json:"role"`
+		Activated bool   `json:"activated"`
 	}{
-		ID:    int(user.ID),
-		Name:  user.FirstName + " " + user.LastName,
-		Email: user.Email,
-		Role:  user.Role,
+		ID:        int(user.ID),
+		Name:      user.FirstName + " " + user.LastName,
+		Email:     user.Email,
+		Role:      user.Role,
+		Activated: user.Activated,
 	}
 
 	err := app.writeJSON(w, http.StatusOK, envelope{"user": userResponse}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}
+}
+
+// resend activation token
+func (app *application) resendActivationTokenHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse the plaintext activation token from the request Body.
+	var input struct {
+		Email string `json:"email"`
+	}
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	// Validate the plaintext token.
+	v := validator.New()
+	if data.ValidateEmail(v, input.Email); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+	// retrieve the details of the user associated with the activation token
+	// if no record is found send an invalid token response
+	user, err := app.models.Users.GetUserByEmail(input.Email)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			v.AddError("email", "Invalid or Expired Activation Token")
+			app.failedValidationResponse(w, r, v.Errors)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+	//generate a new activation token
+	token, err := app.models.Tokens.New(user.ID, 3*24*time.Hour, data.ScopeActivation)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	//send the user an email containing the new token
+	data := map[string]interface{}{
+		"activationToken": token.Plaintext,
+		"firstName":       user.FirstName,
+		"logoURL":         "https://res.cloudinary.com/dbm6gjv59/image/upload/v1721847638/Group_1_i6y4u4.png",
+	}
+	err = app.mailer.Send(user.Email, "verify_email.tmpl", data)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	//send the user an email containing the new token
+	err = app.writeJSON(w, http.StatusOK, envelope{"message": "Activation email sent"}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
 }
