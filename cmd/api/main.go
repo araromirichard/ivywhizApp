@@ -89,8 +89,8 @@ func main() {
 	flag.StringVar(&adminPassword, "admin-password", "IvywhizPass123", "Password for the default admin user")
 
 	// Database configuration
-	// flag.StringVar(&cfg.db.dsn, "db-dsn", "postgres://postgres:OCuG1gml5uvgF2U@ivywhizdb.flycast:5432/postgres?sslmode=disable", "PostgreSQL DSN")
-	flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("IVYWHIZ_DB_DSN"), "PostgreSQL DSN")
+	flag.StringVar(&cfg.db.dsn, "db-dsn", "postgres://postgres:OCuG1gml5uvgF2U@ivywhizdb.flycast:5432/postgres?sslmode=disable", "PostgreSQL DSN")
+	//flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("IVYWHIZ_DB_DSN"), "PostgreSQL DSN")
 	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "PostgreSQL max open connections")
 	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "PostgreSQL max idle connections")
 	flag.StringVar(&cfg.db.maxIdleTime, "db-max-idle-time", "15m", "PostgreSQL max connection idle time")
