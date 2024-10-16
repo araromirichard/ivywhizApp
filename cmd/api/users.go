@@ -12,18 +12,19 @@ import (
 
 func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		FirstName   string          `json:"first_name"`
-		LastName    string          `json:"last_name"`
-		Username    string          `json:"username"`
-		Email       string          `json:"email"`
-		Password    string          `json:"password"`
-		Role        string          `json:"role"`
-		DateOfBirth *string         `json:"date_of_birth,omitempty"`
-		Gender      *string         `json:"gender,omitempty"`
-		Address     *data.Address   `json:"address,omitempty"`
-		Guardian    *data.Guardian  `json:"guardian,omitempty"`
-		Student     *data.Student   `json:"student,omitempty"`
-		Photo       *data.UserPhoto `json:"photo,omitempty"`
+		FirstName     string          `json:"first_name"`
+		LastName      string          `json:"last_name"`
+		Username      string          `json:"username"`
+		Email         string          `json:"email"`
+		Password      string          `json:"password"`
+		Role          string          `json:"role"`
+		AboutYourself *string         `json:"about_yourself,omitempty"`
+		DateOfBirth   *string         `json:"date_of_birth,omitempty"`
+		Gender        *string         `json:"gender,omitempty"`
+		Address       *data.Address   `json:"address,omitempty"`
+		Guardian      *data.Guardian  `json:"guardian,omitempty"`
+		Student       *data.Student   `json:"student,omitempty"`
+		Photo         *data.UserPhoto `json:"photo,omitempty"`
 	}
 
 	err := app.readJSON(w, r, &input)
@@ -39,17 +40,18 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	user := &data.User{
-		FirstName:   input.FirstName,
-		LastName:    input.LastName,
-		Username:    input.Username,
-		Email:       input.Email,
-		Role:        input.Role,
-		DateOfBirth: dateOfBirth,
-		Gender:      input.Gender,
-		Activated:   false,
-		Address:     input.Address,
-		Guardian:    input.Guardian,
-		Student:     input.Student,
+		FirstName:     input.FirstName,
+		LastName:      input.LastName,
+		Username:      input.Username,
+		Email:         input.Email,
+		Role:          input.Role,
+		AboutYourself: input.AboutYourself,
+		DateOfBirth:   dateOfBirth,
+		Gender:        input.Gender,
+		Activated:     false,
+		Address:       input.Address,
+		Guardian:      input.Guardian,
+		Student:       input.Student,
 	}
 
 	if user.Role == "student" && user.Student != nil {

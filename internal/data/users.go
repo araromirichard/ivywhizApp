@@ -119,13 +119,14 @@ func (m UserModel) Insert(u *User) error {
 	// Insert student if role is student
 	if u.Role == "student" && u.Student != nil {
 		queryStudent := `
-					INSERT INTO students (ivw_id, user_id, family_background, created_at, updated_at)
-					VALUES ($1, $2, $3, $4, $5)
+					INSERT INTO students (ivw_id, user_id, family_background, education_level, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, $5, $6)
 					RETURNING id, created_at, updated_at, version`
 		argsStudent := []interface{}{
 			u.Student.IvwID,
 			u.ID,
 			u.Student.FamilyBackground,
+			u.Student.EducationLevel,
 			time.Now(),
 			time.Now(),
 		}
@@ -624,6 +625,7 @@ func ValidateUser(v *validator.Validator, user *User) {
 		if user.Student != nil {
 			v.Check(user.Student.IvwID != "", "student_id", "must be provided")
 			v.Check(user.Student.FamilyBackground != nil, "family background", "must be provided")
+			ValidateEducationLevel(v, user.Student.EducationLevel)
 		}
 	}
 
@@ -658,6 +660,12 @@ func ValidateGuardian(v *validator.Validator, guardian *Guardian) {
 	v.Check(guardian.RelationshipToStudent != "", "guardian.relationship_to_student", "Guardian relationship to student is required")
 	v.Check(guardian.Phone != "", "guardian.phone", "Guardian phone is required")
 	ValidateEmail(v, guardian.Email)
+}
+
+func ValidateEducationLevel(v *validator.Validator, educationLevel string) {
+	validEducationLevels := []string{"primary", "secondary", "tertiary", "other"}
+	v.Check(educationLevel != "", "education_level", "must be provided")
+	v.Check(validator.In(educationLevel, validEducationLevels...), "education_level", "must be one of preschool, primary, secondary, tertiary, or other")
 }
 
 // ValidateImage checks the image file for size and type
