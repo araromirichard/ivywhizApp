@@ -83,14 +83,14 @@ func main() {
 
 	// Admin initialization flags
 	var adminFirstName, adminLastName, adminEmail, adminPassword string
-	flag.StringVar(&adminFirstName, "admin-first-name", "Ivywhiz", "First name for the default admin user")
-	flag.StringVar(&adminLastName, "admin-last-name", "Admin", "Last name for the default admin user")
-	flag.StringVar(&adminEmail, "admin-email", "ivywhizadmin@mailinator.com", "Email for the default admin user")
-	flag.StringVar(&adminPassword, "admin-password", "IvywhizPass123", "Password for the default admin user")
+	flag.StringVar(&adminFirstName, "admin-first-name", os.Getenv("ADMIN_FIRST_NAME"), "First name for the default admin user")
+	flag.StringVar(&adminLastName, "admin-last-name", os.Getenv("ADMIN_LAST_NAME"), "Last name for the default admin user")
+	flag.StringVar(&adminEmail, "admin-email", os.Getenv("ADMIN_EMAIL"), "Email for the default admin user")
+	flag.StringVar(&adminPassword, "admin-password", os.Getenv("ADMIN_PASSWORD"), "Password for the default admin user")
 
 	// Database configuration
-	// flag.StringVar(&cfg.db.dsn, "db-dsn", "postgres://postgres:OCuG1gml5uvgF2U@ivywhizdb.flycast:5432/postgres?sslmode=disable", "PostgreSQL DSN")
-	flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("IVYWHIZ_DB_DSN"), "PostgreSQL DSN")
+	flag.StringVar(&cfg.db.dsn, "db-dsn", "postgres://postgres:OCuG1gml5uvgF2U@ivywhizdb.flycast:5432/postgres?sslmode=disable", "PostgreSQL DSN")
+	//flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("IVYWHIZ_DB_DSN"), "PostgreSQL DSN")
 	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "PostgreSQL max open connections")
 	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "PostgreSQL max idle connections")
 	flag.StringVar(&cfg.db.maxIdleTime, "db-max-idle-time", "15m", "PostgreSQL max connection idle time")
