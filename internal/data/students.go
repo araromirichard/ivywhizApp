@@ -19,6 +19,9 @@ type StudentModel struct {
 	DB *sql.DB
 }
 
+
+
+
 // func ValidateStudent(v *validator.Validator, student *Student) {
 // 	v.Check(student.UserID != 0, "user_id", "must be provided")
 // 	v.Check(student.FamilyBackground != nil, "family background", "must be provided")

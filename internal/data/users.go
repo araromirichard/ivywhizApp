@@ -701,22 +701,23 @@ func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error)
 	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
 
 	query := `
-    SELECT u.id, u.email, u.password, u.first_name, u.last_name, u.username,
-           u.activated, u.role, u.about_yourself, u.date_of_birth, u.gender,
-           u.created_at, u.updated_at, u.version,
-           up.photo_url, up.public_id, up.created_at AS photo_created_at, up.updated_at AS photo_updated_at,
-           a.id AS address_id, a.street_address_1, a.street_address_2, a.city, a.state, a.zipcode, a.country,
-           s.id AS student_id, s.ivw_id, s.family_background,
-           g.id AS guardian_id, g.first_name AS guardian_first_name, g.last_name AS guardian_last_name,
-           g.relationship_to_student, g.phone AS guardian_phone, g.email AS guardian_email
-    FROM users u
-    INNER JOIN tokens ON u.id::bigint = tokens.user_id::bigint
-    LEFT JOIN user_photos up ON u.id::bigint = up.user_id::bigint
-    LEFT JOIN addresses a ON u.id::bigint = a.user_id::bigint
-    LEFT JOIN students s ON u.id::bigint = s.user_id::bigint
-    LEFT JOIN guardians g ON s.id::bigint = g.student_id::bigint
-    WHERE tokens.hash = $1 AND tokens.scope = $2 AND tokens.expiry > $3
-    `
+	SELECT u.id, u.email, u.password, u.first_name, u.last_name, u.username,
+		   u.activated, u.role, u.about_yourself, u.date_of_birth, u.gender,
+		   u.created_at, u.updated_at, u.version,
+		   up.photo_url, up.public_id, up.created_at AS photo_created_at, up.updated_at AS photo_updated_at,
+		   a.id AS address_id, a.street_address_1, a.street_address_2, a.city, a.state, a.zipcode, a.country,
+		   s.id AS student_id, s.ivw_id, s.family_background,
+		   g.id AS guardian_id, g.first_name AS guardian_first_name, g.last_name AS guardian_last_name,
+		   g.relationship_to_student, g.phone AS guardian_phone, g.email AS guardian_email
+	FROM users u
+	INNER JOIN tokens ON u.id::bigint = tokens.user_id::bigint
+	LEFT JOIN user_photos up ON u.id::bigint = up.user_id::bigint
+	LEFT JOIN addresses a ON u.id::bigint = a.user_id::bigint
+	LEFT JOIN students s ON u.id = s.user_id AND u.role = 'student'
+	LEFT JOIN guardians g ON s.ivw_id = g.student_id AND u.role = 'student'
+
+	WHERE tokens.hash = $1 AND tokens.scope = $2 AND tokens.expiry > $3
+	`
 
 	args := []interface{}{
 		tokenHash[:],
@@ -725,6 +726,7 @@ func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error)
 	}
 
 	var user User
+
 	var photoURL, photoPublicID sql.NullString
 	var photoCreatedAt, photoUpdatedAt sql.NullTime
 	var address Address
