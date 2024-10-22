@@ -119,13 +119,14 @@ func (m UserModel) Insert(u *User) error {
 	// Insert student if role is student
 	if u.Role == "student" && u.Student != nil {
 		queryStudent := `
-					INSERT INTO students (ivw_id, user_id, family_background, created_at, updated_at)
-					VALUES ($1, $2, $3, $4, $5)
+					INSERT INTO students (ivw_id, user_id, family_background, education_level, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, $5, $6)
 					RETURNING id, created_at, updated_at, version`
 		argsStudent := []interface{}{
 			u.Student.IvwID,
 			u.ID,
 			u.Student.FamilyBackground,
+			u.Student.EducationLevel,
 			time.Now(),
 			time.Now(),
 		}
@@ -624,6 +625,7 @@ func ValidateUser(v *validator.Validator, user *User) {
 		if user.Student != nil {
 			v.Check(user.Student.IvwID != "", "student_id", "must be provided")
 			v.Check(user.Student.FamilyBackground != nil, "family background", "must be provided")
+			ValidateEducationLevel(v, user.Student.EducationLevel)
 		}
 	}
 
@@ -660,6 +662,12 @@ func ValidateGuardian(v *validator.Validator, guardian *Guardian) {
 	ValidateEmail(v, guardian.Email)
 }
 
+func ValidateEducationLevel(v *validator.Validator, educationLevel string) {
+	validEducationLevels := []string{"primary", "secondary", "tertiary", "other"}
+	v.Check(educationLevel != "", "education_level", "must be provided")
+	v.Check(validator.In(educationLevel, validEducationLevels...), "education_level", "must be one of preschool, primary, secondary, tertiary, or other")
+}
+
 // ValidateImage checks the image file for size and type
 func ValidateImage(v *validator.Validator, filename string, fileHeader *multipart.FileHeader) {
 	// Check if file is provided
@@ -693,22 +701,23 @@ func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error)
 	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
 
 	query := `
-    SELECT u.id, u.email, u.password, u.first_name, u.last_name, u.username,
-           u.activated, u.role, u.about_yourself, u.date_of_birth, u.gender,
-           u.created_at, u.updated_at, u.version,
-           up.photo_url, up.public_id, up.created_at AS photo_created_at, up.updated_at AS photo_updated_at,
-           a.id AS address_id, a.street_address_1, a.street_address_2, a.city, a.state, a.zipcode, a.country,
-           s.id AS student_id, s.ivw_id, s.family_background,
-           g.id AS guardian_id, g.first_name AS guardian_first_name, g.last_name AS guardian_last_name,
-           g.relationship_to_student, g.phone AS guardian_phone, g.email AS guardian_email
-    FROM users u
-    INNER JOIN tokens ON u.id::bigint = tokens.user_id::bigint
-    LEFT JOIN user_photos up ON u.id::bigint = up.user_id::bigint
-    LEFT JOIN addresses a ON u.id::bigint = a.user_id::bigint
-    LEFT JOIN students s ON u.id::bigint = s.user_id::bigint
-    LEFT JOIN guardians g ON s.id::bigint = g.student_id::bigint
-    WHERE tokens.hash = $1 AND tokens.scope = $2 AND tokens.expiry > $3
-    `
+		SELECT u.id, u.email, u.password, u.first_name, u.last_name, u.username,
+			u.activated, u.role, u.about_yourself, u.date_of_birth, u.gender,
+			u.created_at, u.updated_at, u.version,
+			up.photo_url, up.public_id, up.created_at AS photo_created_at, up.updated_at AS photo_updated_at,
+			a.id AS address_id, a.street_address_1, a.street_address_2, a.city, a.state, a.zipcode, a.country,
+			s.id AS student_id, s.ivw_id, s.family_background,
+			g.id AS guardian_id, g.first_name AS guardian_first_name, g.last_name AS guardian_last_name,
+			g.relationship_to_student, g.phone AS guardian_phone, g.email AS guardian_email
+		FROM users u
+		INNER JOIN tokens ON u.id::bigint = tokens.user_id::bigint
+		LEFT JOIN user_photos up ON u.id::bigint = up.user_id::bigint
+		LEFT JOIN addresses a ON u.id::bigint = a.user_id::bigint
+		LEFT JOIN students s ON u.id = s.user_id AND u.role = 'student'
+		LEFT JOIN guardians g ON s.ivw_id = g.student_id AND u.role = 'student'
+
+		WHERE tokens.hash = $1 AND tokens.scope = $2 AND tokens.expiry > $3
+	`
 
 	args := []interface{}{
 		tokenHash[:],
@@ -717,6 +726,7 @@ func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error)
 	}
 
 	var user User
+
 	var photoURL, photoPublicID sql.NullString
 	var photoCreatedAt, photoUpdatedAt sql.NullTime
 	var address Address
@@ -780,6 +790,5 @@ func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error)
 			user.Guardian = &guardian
 		}
 	}
-
 	return &user, nil
 }

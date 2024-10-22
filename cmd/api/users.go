@@ -12,18 +12,19 @@ import (
 
 func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		FirstName   string          `json:"first_name"`
-		LastName    string          `json:"last_name"`
-		Username    string          `json:"username"`
-		Email       string          `json:"email"`
-		Password    string          `json:"password"`
-		Role        string          `json:"role"`
-		DateOfBirth *string         `json:"date_of_birth,omitempty"`
-		Gender      *string         `json:"gender,omitempty"`
-		Address     *data.Address   `json:"address,omitempty"`
-		Guardian    *data.Guardian  `json:"guardian,omitempty"`
-		Student     *data.Student   `json:"student,omitempty"`
-		Photo       *data.UserPhoto `json:"photo,omitempty"`
+		FirstName     string          `json:"first_name"`
+		LastName      string          `json:"last_name"`
+		Username      string          `json:"username"`
+		Email         string          `json:"email"`
+		Password      string          `json:"password"`
+		Role          string          `json:"role"`
+		AboutYourself *string         `json:"about_yourself,omitempty"`
+		DateOfBirth   *string         `json:"date_of_birth,omitempty"`
+		Gender        *string         `json:"gender,omitempty"`
+		Address       *data.Address   `json:"address,omitempty"`
+		Guardian      *data.Guardian  `json:"guardian,omitempty"`
+		Student       *data.Student   `json:"student,omitempty"`
+		Photo         *data.UserPhoto `json:"photo,omitempty"`
 	}
 
 	err := app.readJSON(w, r, &input)
@@ -39,17 +40,18 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	user := &data.User{
-		FirstName:   input.FirstName,
-		LastName:    input.LastName,
-		Username:    input.Username,
-		Email:       input.Email,
-		Role:        input.Role,
-		DateOfBirth: dateOfBirth,
-		Gender:      input.Gender,
-		Activated:   false,
-		Address:     input.Address,
-		Guardian:    input.Guardian,
-		Student:     input.Student,
+		FirstName:     input.FirstName,
+		LastName:      input.LastName,
+		Username:      input.Username,
+		Email:         input.Email,
+		Role:          input.Role,
+		AboutYourself: input.AboutYourself,
+		DateOfBirth:   dateOfBirth,
+		Gender:        input.Gender,
+		Activated:     false,
+		Address:       input.Address,
+		Guardian:      input.Guardian,
+		Student:       input.Student,
 	}
 
 	if user.Role == "student" && user.Student != nil {
@@ -586,7 +588,7 @@ func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Reque
 
 	err := app.readJSON(w, r, &input)
 	if err != nil {
-		app.badRequestResponse(w, r, err)
+		app.badRequestResponse(w, r, fmt.Errorf("unable to read: %w", err))
 		return
 	}
 
@@ -603,7 +605,7 @@ func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Reque
 			v.AddError("token", "Invalid or expired activation token")
 			app.failedValidationResponse(w, r, v.Errors)
 		default:
-			app.serverErrorResponse(w, r, err)
+			app.serverErrorResponse(w, r, fmt.Errorf("error getting token: %w", err))
 		}
 		return
 	}
@@ -612,13 +614,13 @@ func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Reque
 
 	err = app.models.Users.UpdateUser(user)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		app.serverErrorResponse(w, r, fmt.Errorf("unable to update user: %w", err))
 		return
 	}
 
 	err = app.models.Tokens.DeleteAllForUser(data.ScopeActivation, user.ID)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		app.serverErrorResponse(w, r, fmt.Errorf("failed to delete user tokens: %w", err))
 		return
 	}
 
